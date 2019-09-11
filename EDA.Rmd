@@ -1,0 +1,139 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Data Cleaning BVG 
+```{r}
+library(data.table)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+library(stringr)
+library(leaflet)
+df.bvg.requests <- fread('BVG/anfragen_20170718.csv')
+df.bvg.requests <- na.omit(df.bvg.requests, cols='START_NAME')
+df.bvg.requests$START_ID<- as.character(df.bvg.requests$START_ID)
+df.bvg.requests$ZIEL_NR<- as.character(df.bvg.requests$ZIEL_NR)
+df.bvg.stops.geo <- fread('BVG/gtfs/stops.txt') 
+
+# gtfs Berlin Hbhf _ 900000003201 / requests : 9003201
+df.bvg.stops.geo <- distinct(df.bvg.stops.geo,parent_station, .keep_all= TRUE)
+df.bvg.stops.geo <- df.bvg.stops.geo %>% filter(!is.na(parent_station))
+df.bvg.stops.geo <- df.bvg.stops.geo %>% mutate('START_ID'=str_replace_all(parent_station, pattern = "00000", replacement = "")) 
+
+df.bvg.stops.geo <- distinct(df.bvg.stops.geo)
+df.bvg.stops.geo.start <- df.bvg.stops.geo %>% select(START_ID,'stop_lat_start'=stop_lat,'stop_lon_start'=stop_lon)
+df.bvg.stops.geo.end <- df.bvg.stops.geo %>% select(START_ID,'stop_lat_end'=stop_lat,'stop_lon_end'=stop_lon)
+
+df.merged <- merge(df.bvg.requests,df.bvg.stops.geo.start,by='START_ID',all.x=T,suffixes = c('_requests','_start')) 
+df.merged <- merge(df.merged,df.bvg.stops.geo.end,by.x='ZIEL_NR',by.y='START_ID',all.x=T,suffixes = c('_requests','_end'))
+df.merged <- df.merged %>% mutate(START_X=ifelse(is.na(START_X),stop_lat_start,START_X))
+df.merged <- df.merged %>% mutate(START_Y=ifelse(is.na(START_Y),stop_lon_start,START_Y))
+
+df.merged <- df.merged %>% mutate(ZIEL_X=ifelse(is.na(ZIEL_X),stop_lat_end,ZIEL_X))
+df.merged <- df.merged %>% mutate(ZIEL_Y=ifelse(is.na(ZIEL_Y),stop_lon_end,ZIEL_Y))
+# create a df of start_id that are not unknown (i.e no start lat/lon):
+
+df.merged$request_datetime <- dmy_hm(str_c(df.merged$ANFRAGE_DATUM,df.merged$ANFRAGE_ZEIT))
+df.merged$ANFRAGE_DATUM<- dmy(df.merged$ANFRAGE_DATUM)
+df.merged$request_datetime_rounded <- round_date(df.merged$request_datetime, unit = "hour",
+  week_start = getOption("lubridate.week.start", 7))
+
+df.merged$request_time_rounded <- hour(df.merged$request_datetime_rounded)
+
+
+
+
+df.merged <- df.merged %>% filter(ANFRAGE_DATUM>'2017-07-16' & ANFRAGE_DATUM<'2017-07-19')
+df.merged$start_lat_lon <- str_c(df.merged$START_X,'_',df.merged$START_Y)
+df.merged$end_lat_lon <- str_c(df.merged$ZIEL_X,'_',df.merged$ZIEL_Y)
+
+groupy.start <- df.merged %>% group_by(ANFRAGE_DATUM,request_time_rounded, start_lat_lon)%>% summarise(total_date=n())
+groupy.end  <-  df.merged %>% group_by(ANFRAGE_DATUM,request_time_rounded, end_lat_lon)%>% summarise(total_date=n())
+groupy.start$lat<- str_extract(groupy.start$start_lat_lon, "[^_]+") %>% as.numeric()
+groupy.start$lon<- str_extract(groupy.start$start_lat_lon, "[^_]+$") %>% as.numeric()
+
+groupy.end$lat<- str_extract(groupy.end$end_lat_lon, "[^_]+")
+groupy.end$lon<- str_extract(groupy.end$end_lat_lon, "[^_]+$")
+
+write.csv(groupy.start,'BVG_start_points.csv')
+write.csv(groupy.end,'BVG_end_points.csv')
+
+```
+
+## plot BVG Starts
+
+```{r}
+df <- groupy.start %>% filter(ANFRAGE_DATUM=='2017-07-17' & request_time_rounded==0)
+bins <- c(0, 10, 20, 50, 100, 200, 500, 1000, Inf)
+pal <- colorBin("YlOrRd", domain = df$total_date, bins = bins)
+
+leaflet(df) %>% addProviderTiles(providers$Stamen.Toner) %>%
+  addCircleMarkers(
+    radius = ~log(total_date),
+    
+    fillColor=~pal(total_date),
+   
+    stroke = FALSE, fillOpacity = 1
+  )
+```
+
+
+## Bikesharing data
+```{r}
+dt <- fread('BikeSharing/data/preprocessed.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL]
+df$timestamp<- ymd_hms(df$timestamp)
+df$end_timestamp<- ymd_hms(df$end_timestamp)
+
+
+transpose.datetime <- function(bikeId){
+  df.test <- df %>% filter(bikeId==bikeId)
+
+min(df.test$timestamp)
+
+datetime.index <-seq(from = ISOdatetime(2019,04,03,09,0,0),to=ISOdatetime(2019,07,11,9,0,0), by = "10 min") %>% as.data.frame()
+colnames(datetime.index)<-c('dt.index')
+
+setDT(df.test)
+setDT(datetime.index)
+
+setkey(df.test,  timestamp)[, dateMatch:=timestamp]
+merged <-df.test[datetime.index, roll='nearest']
+
+return (merged)
+}
+
+merged <- transpose.datetime(816054969)
+
+```
+
+## plot trips
+```{r}
+leaflet(merged) %>% addProviderTiles(providers$Stamen.Toner) %>%
+  addCircleMarkers(
+       stroke = FALSE, fillOpacity = 1
+  )
+```
+
+## nearest example DT
+```{r}
+
+df1 <- data.frame(ID = sample(1:3, 10, rep=T), dateTarget=(strptime((paste
+    (sprintf("%02d", sample(1:30,10, rep=T)), sprintf("%02d", sample(1:12,10, rep=T)), 
+     (sprintf("%02d", sample(2013:2015,10, rep=T))), sep="")),"%d%m%Y")), Value=sample(15:100, 10, rep=T))
+df2 <- data.frame(ID = sample(1:3, 10, rep=T), dateTarget=(strptime((paste
+     (sprintf("%02d", sample(1:30,20, rep=T)), sprintf("%02d", sample(1:12,20, rep=T)), 
+     (sprintf("%02d", sample(2013:2015,20, rep=T))), sep="")),"%d%m%Y")), ValueMatch=sample(15:100, 20, rep=T))
+setDT(df1)
+setDT(df2)
+
+setkey(df2, ID, dateTarget)[, dateMatch:=dateTarget]
+#df2[df1, roll='nearest']
+
+```
+
