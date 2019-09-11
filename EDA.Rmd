@@ -12,6 +12,56 @@ library(ggplot2)
 library(plotly)
 library(stringr)
 library(leaflet)
+
+
+```
+
+
+
+## Bikesharing data
+```{r}
+dt <- fread('BikeSharing/data/preprocessed.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL]
+df$timestamp<- ymd_hms(df$timestamp)
+df$end_timestamp<- ymd_hms(df$end_timestamp)
+
+
+transpose.datetime <- function(bikeId){
+  df.test <- df %>% filter(bikeId==bikeId)
+
+min(df.test$timestamp)
+
+datetime.index <-seq(from = ISOdatetime(2019,04,03,09,0,0),to=ISOdatetime(2019,07,11,9,0,0), by = "10 min") %>% as.data.frame()
+colnames(datetime.index)<-c('dt.index')
+
+setDT(df.test)
+setDT(datetime.index)
+
+setkey(df.test,  timestamp)[, dateMatch:=timestamp]
+merged <-df.test[datetime.index, roll='nearest']
+
+return (merged)
+}
+
+
+# select a bike ID to plot the trip
+merged <- transpose.datetime(816054969)
+
+```
+
+## plot trips
+```{r}
+leaflet(merged) %>% addProviderTiles(providers$Stamen.Toner) %>%
+  addCircleMarkers(
+       stroke = FALSE, fillOpacity = 1
+  )
+```
+
+## BVG data cleaning
+```{r}
+
 df.bvg.requests <- fread('BVG/anfragen_20170718.csv')
 df.bvg.requests <- na.omit(df.bvg.requests, cols='START_NAME')
 df.bvg.requests$START_ID<- as.character(df.bvg.requests$START_ID)
@@ -60,80 +110,6 @@ groupy.end$lon<- str_extract(groupy.end$end_lat_lon, "[^_]+$")
 
 write.csv(groupy.start,'BVG_start_points.csv')
 write.csv(groupy.end,'BVG_end_points.csv')
-
-```
-
-## plot BVG Starts
-
-```{r}
-df <- groupy.start %>% filter(ANFRAGE_DATUM=='2017-07-17' & request_time_rounded==0)
-bins <- c(0, 10, 20, 50, 100, 200, 500, 1000, Inf)
-pal <- colorBin("YlOrRd", domain = df$total_date, bins = bins)
-
-leaflet(df) %>% addProviderTiles(providers$Stamen.Toner) %>%
-  addCircleMarkers(
-    radius = ~log(total_date),
-    
-    fillColor=~pal(total_date),
-   
-    stroke = FALSE, fillOpacity = 1
-  )
-```
-
-
-## Bikesharing data
-```{r}
-dt <- fread('BikeSharing/data/preprocessed.csv')
-
-# drop dupes cols
-df<- dt[, which(duplicated(names(dt))) := NULL]
-df$timestamp<- ymd_hms(df$timestamp)
-df$end_timestamp<- ymd_hms(df$end_timestamp)
-
-
-transpose.datetime <- function(bikeId){
-  df.test <- df %>% filter(bikeId==bikeId)
-
-min(df.test$timestamp)
-
-datetime.index <-seq(from = ISOdatetime(2019,04,03,09,0,0),to=ISOdatetime(2019,07,11,9,0,0), by = "10 min") %>% as.data.frame()
-colnames(datetime.index)<-c('dt.index')
-
-setDT(df.test)
-setDT(datetime.index)
-
-setkey(df.test,  timestamp)[, dateMatch:=timestamp]
-merged <-df.test[datetime.index, roll='nearest']
-
-return (merged)
-}
-
-merged <- transpose.datetime(816054969)
-
-```
-
-## plot trips
-```{r}
-leaflet(merged) %>% addProviderTiles(providers$Stamen.Toner) %>%
-  addCircleMarkers(
-       stroke = FALSE, fillOpacity = 1
-  )
-```
-
-## nearest example DT
-```{r}
-
-df1 <- data.frame(ID = sample(1:3, 10, rep=T), dateTarget=(strptime((paste
-    (sprintf("%02d", sample(1:30,10, rep=T)), sprintf("%02d", sample(1:12,10, rep=T)), 
-     (sprintf("%02d", sample(2013:2015,10, rep=T))), sep="")),"%d%m%Y")), Value=sample(15:100, 10, rep=T))
-df2 <- data.frame(ID = sample(1:3, 10, rep=T), dateTarget=(strptime((paste
-     (sprintf("%02d", sample(1:30,20, rep=T)), sprintf("%02d", sample(1:12,20, rep=T)), 
-     (sprintf("%02d", sample(2013:2015,20, rep=T))), sep="")),"%d%m%Y")), ValueMatch=sample(15:100, 20, rep=T))
-setDT(df1)
-setDT(df2)
-
-setkey(df2, ID, dateTarget)[, dateMatch:=dateTarget]
-#df2[df1, roll='nearest']
 
 ```
 
