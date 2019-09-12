@@ -1,0 +1,45 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+dt <- fread('BikeSharing/data/preprocessed.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL]
+df$timestamp<- ymd_hms(df$timestamp)
+df$end_timestamp<- ymd_hms(df$end_timestamp)
+
+
+transpose.datetime <- function(bikeId){
+  df.test <- df %>% filter(bikeId==bikeId)
+
+min(df.test$timestamp)
+
+datetime.index <-seq(from = ISOdatetime(2019,04,03,09,0,0),to=ISOdatetime(2019,07,11,9,0,0), by = "10 min") %>% as.data.frame()
+colnames(datetime.index)<-c('dt.index')
+
+setDT(df.test)
+setDT(datetime.index)
+
+setkey(df.test,  timestamp)[, dateMatch:=timestamp]
+merged <-df.test[datetime.index, roll='nearest']
+
+return (merged)
+}
+
+
+# select a bike ID to plot the trip
+merged <- transpose.datetime(816054969)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

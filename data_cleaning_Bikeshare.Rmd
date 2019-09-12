@@ -1,0 +1,170 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+```{r}
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr)
+
+```
+## Add the LOR ID to the Bikesharing data
+```{r}
+
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/lor_planungsgraeume
+sp.lor    <- readOGR(dsn="data/shapefiles/LOR/",layer="lor_planungsraeume",encoding = "DE")
+
+# load the original Bikesharing file : (source :https://drive.google.com/drive/folders/1wsXVdBxhKSqpj-fouNM9RbF7NFrLHUvO)
+dt <- fread('BikeSharing/data/preprocessed.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL] #%>% head(10000)
+dt <- NULL
+
+# set the projection system for the bikesharing coordinates :
+xy.from <- df %>% select(longitude,latitude)
+xy.to <- df %>% select(next_lon,next_lat)
+
+# create a Spatial
+spdf.from <- SpatialPointsDataFrame(coords = xy.from, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+spdf.to <- SpatialPointsDataFrame(coords = xy.to, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+
+# clear memory of unused items
+xy.from <- NULL
+xy.to <- NULL
+
+ID.sp.from <- sp::over(spdf.from,sp.lor) %>% select(spatial_na)
+
+# clear memory
+spdf.from <- NULL
+colnames(ID.sp.from)<- paste0('from_',colnames(ID.sp.from))
+
+ID.sp.to <- sp::over(spdf.to,sp.lor) %>% select(spatial_na)
+
+# clear memory
+spdf.to <- NULL
+colnames(ID.sp.to)<- paste0('to_',colnames(ID.sp.to))
+
+# keep only relevant columns from the bikeshare (we do not need the geocordinates anymore):
+df <- df %>% select(id,bikeId,providerId,timestamp, prev_id,next_id,end_timestamp,mode)
+
+df <- cbind(df,ID.sp.from,ID.sp.to)
+
+# clear memory
+ID.sp.from <- NULL
+ID.sp.to <- NULL
+
+
+
+write.csv(df,'bikes_preprocessed_with_LOR.csv')
+
+
+```
+
+## Add Ortsteile (District) ID to the Bikesharing data
+```{r}
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/ortsteile
+sp.lor.districts    <- readOGR(dsn="data/shapefiles/LOR_Ortsteile/",layer="lor_ortsteile",encoding = "DE")
+
+dt <- fread('BikeSharing/data/preprocessed.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL] 
+dt <- NULL
+
+df <- df %>% select(id,latitude,longitude,next_lat,next_lon)
+
+# set the projection system for the bikesharing coordinates :
+xy.from <- df %>% select(longitude,latitude)
+xy.to <- df %>% select(next_lon,next_lat)
+
+# create a Spatial
+spdf.from <- SpatialPointsDataFrame(coords = xy.from, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+spdf.to <- SpatialPointsDataFrame(coords = xy.to, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+
+# clear memory of unused items
+xy.from <- NULL
+xy.to <- NULL
+
+ID.sp.from_district <- sp::over(spdf.from,sp.lor.districts) %>% select(spatial_na)
+colnames(ID.sp.from_district)<- paste0('from_district_',colnames(ID.sp.from_district))
+
+# clear memory
+spdf.from<- NULL
+
+ID.sp.to_district <- sp::over(spdf.to,sp.lor.districts) %>% select(spatial_na)
+
+#clear memory
+spdf.to <- NULL
+colnames(ID.sp.to_district)<- paste0('to_district_',colnames(ID.sp.to_district))
+
+
+# keep only relevant columns from the bikeshare (we do not need the geocordinates anymore):
+df <- df %>% select(id)
+
+df <- cbind(df,ID.sp.from_district,ID.sp.to_district)
+
+
+
+# clear memory
+ID.sp.from_district <- NULL
+ID.sp.to_district <- NULL
+
+
+
+write.csv(df,'bikes_preprocessed_with_LOR_and_districts.csv')
+
+
+```
+# merge bikesharing trips with LOR and LOR Districts AND add status  duration
+```{r}
+df.with.LOR <- fread('bikes_preprocessed_with_LOR.csv') %>% select(-V1)
+df.with.LOR.and.district <- fread('bikes_preprocessed_with_LOR_and_districts.csv') %>% select(-V1)
+
+df <- merge(df.with.LOR,df.with.LOR.and.district,by='id')
+df.with.LOR<- NULL
+df.with.LOR.and.district <- NULL
+
+df$timestamp <- ymd_hms(df$timestamp)
+df$end_timestamp <- ymd_hms(df$end_timestamp)
+df$duration_minutes <- difftime(df$end_timestamp, df$timestamp, units = "mins") %>% as.numeric()
+
+write.csv(df,'bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
+
+```
+
+## Add distance of trips
+```{r}
+library(geosphere)
+df <- NULL
+dt <- fread('BikeSharing/data/preprocessed.csv')
+df<- dt[, which(duplicated(names(dt))) := NULL]
+dt <- NULL
+df <- df %>% select(id,longitude,latitude,next_lon,next_lat)
+
+
+df$distance_direct <- distHaversine( df[, c('longitude', 'latitude')], df[, c('next_lon', 'next_lat')])
+
+df <- df %>% select(id,distance_direct)
+
+df.with.LOR.and.co <- fread('bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
+df.with.LOR.and.co <- df.with.LOR.and.co %>% select(-V1)
+
+df <- merge(df.with.LOR.and.co,df,by='id')
+df.with.LOR.and.co <- NULL
+write.csv(df,'bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance.csv')
+
+```
+
