@@ -3,17 +3,20 @@ library(magrittr)
 library(shiny)
 library(deckgl)
 library(dplyr)
+source('key.R')
 
-Sys.setenv(MAPBOX_API_TOKEN = "coucou")
 
-sample_data <- bart_segments
-df <-read.csv('bvg_flat.csv',nrows = 300, stringsAsFactors = F) %>% na.omit(from_lat)
+#sample_data <- bart_segments
+#df <-read.csv('bvg_flat.csv',nrows = 300, stringsAsFactors = F) %>% na.omit(from_lat)
+df <-read.csv('data/trips_districts.csv', stringsAsFactors = F) %>% filter(date_only=='2019-07-01')
+df <- df %>% select(from_lng = longitude_LOR_district.x,from_lat=latitude_LOR_district.x,to_lng=longitude_LOR_district.y,to_lat=latitude_LOR_district.y,trips)
 sample_data <- df
 
 properties <- list(
-  getWidth = 2,
-  getSourceColor = JS("d => [Math.sqrt(d.inbound), 140, 0]"),
-  getTargetColor = JS("d => [Math.sqrt(d.outbound), 140, 0]"),
+  getWidth = ~trips,
+  pickable = TRUE,
+  getSourceColor = JS("d => [Math.sqrt(d.inbound), 255,127]"),
+  getTargetColor = JS("d => [255, 0, 0]"),
   getSourcePosition = ~from_lng + from_lat,
   getTargetPosition = ~to_lng + to_lat
 )
@@ -27,7 +30,7 @@ view <- fluidPage(
 
 backend <- function(input, output) {
   output$deck <- renderDeckgl({
-    deckgl(zoom = 10, pitch = 35) %>%
+    deckgl(zoom = 10, pitch = 35,latitude = 52.52, longitude = 13.4) %>%
       add_arc_layer(
         data = sample_data,
         properties = properties
@@ -42,7 +45,7 @@ backend <- function(input, output) {
   observeEvent(input$go, {
     deckgl_proxy("deck") %>%
       add_arc_layer(
-        data = sample_data[1:sample(1:45, 1), ],
+        data = df %>% filter(from_lng==sample(df$from_lng,1)),
         properties = properties
       ) %>%
       update_deckgl(it = "works")
