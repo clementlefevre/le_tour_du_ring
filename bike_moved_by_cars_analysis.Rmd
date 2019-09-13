@@ -1,0 +1,43 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2,geosphere)
+```
+
+
+# for the same bikeID  if  status "accessible"-> "accessible" : compute distance between the 2 status
+```{r}
+df <- fread('data/bikes_preprocessed_cleaned.csv')
+df <- df %>% select(id,bikeId,next_id,prev_id,timestamp,end_timestamp,mode,bike_exact_latitude,bike_exact_longitude,bike_exact_next_lat,bike_exact_next_lon,distance_direct,duration_minutes,speed)
+
+ggplot(df %>% filter(mode=='trip' & speed<30 & speed>1),aes(speed))+ geom_histogram(bins=30)
+
+
+df$timestamp <- ymd_hms(df$timestamp)
+df$end_timestamp <- ymd_hms(df$end_timestamp)
+
+df <- df %>% arrange(.,bikeId,timestamp)
+df <- df %>% mutate(bikeId.changed = ifelse(bikeId!=next_id,T,F)) 
+
+#df <- df %>% filter(!bikeId.changed)
+
+groupy <- 
+    df %>%
+    group_by(bikeId) %>%
+    mutate(previous_mode = dplyr::lag(mode, n = 1, default = NA),previous_to_lat = dplyr::lag(bike_exact_next_lat, n = 1, default = NA),previous_to_lon = dplyr::lag(bike_exact_next_lon, n = 1, default = NA))
+
+groupy <- groupy %>% filter(mode==previous_mode & mode=='accessible')
+groupy$distance_moved_from_last_status <- distHaversine( groupy[, c('bike_exact_longitude', 'bike_exact_latitude')], groupy[, c('previous_to_lon', 'previous_to_lat')])
+#groupy <- groupy%>% filter(distance_moved_from_last_status>1)
+ggplot(groupy,aes(distance_moved_from_last_status))+ geom_histogram(binwidth = 100) + scale_y_log10()
+
+```
+
