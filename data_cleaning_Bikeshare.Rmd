@@ -7,9 +7,6 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
 ```{r}
-
-
-
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2)
 
@@ -249,7 +246,7 @@ df <- df %>% filter(!providerId==2)
 df <- df %>% select(id,latitude,longitude,next_lat,next_lon)
 
 
-df <- df %>% select(id, bike_exact_latitude=latitude, bike_exact_longitude = longitude,bike_exact_next_lat = next_lat, bike_exact_lon=next_lon)
+df <- df %>% select(id, bike_exact_latitude=latitude, bike_exact_longitude = longitude,bike_exact_next_lat = next_lat, bike_exact_next_lon=next_lon)
 
 
 df.processed <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed.csv')
@@ -260,13 +257,44 @@ fwrite(df.merged,'data/bikes_preprocessed_with_LOR_and_districts_and_duration_an
 
 
 ```
-## Add geodata (names & geocoordinates of centroids) of LOR/LOR districts with main dataset:
+
+
+# add week.number / week OR weekend field and rounded hour :
 ```{r}
 
 ## clean env
 rm(list = ls())
 
 df <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed_and_exact_geo.csv')
+
+
+# convert to datetime format :
+df$timestamp <- ymd_hms(df$timestamp)
+df$end_timestamp <- ymd_hms(df$end_timestamp)
+
+df$week.number <- lubridate::week(df$timestamp)
+df$date_only <- lubridate::date(df$timestamp)
+
+
+df$week.day.label <- wday(df$timestamp, label = TRUE,locale = "C")
+df$week.day.number <- wday(df$timestamp, label = FALSE)
+df <- df %>% mutate(is.weekend = ifelse(week.day.number %in% c(1,7),TRUE,FALSE))
+
+df$hour_of_day <- hour(df$timestamp)
+df <- df %>% mutate(is.working.hour = ifelse(hour_of_day %in% seq(7,20) & !is.weekend,TRUE,FALSE))
+df$timestamp_rounded <- round_date(df$timestamp, unit = "hour",
+  week_start = getOption("lubridate.week.start", 7))
+
+fwrite(df,'data/bikes_preprocessed_cleaned.csv')
+```
+
+## (Optional) Add geodata (names & geocoordinates of centroids) of LOR/LOR districts with main dataset:
+```{r}
+
+## clean env
+rm(list = ls())
+
+df <- fread('data/bikes_preprocessed_cleaned.csv')
 
 # !!!! add leading zero to spatial_na's:
 #df$from_spatial_na <- str_pad(df$from_spatial_na, 8, pad = "0")
@@ -294,35 +322,6 @@ df.merged <- merge(df.merged,df.lor.to,by.x='to_spatial_na',by.y='to_lor_spatial
 df.merged <- merge(df.merged,df.lor.districts_from,by.x='from_district_spatial_na',by.y='from_lor_district_spatial_na')
 df.merged <- merge(df.merged,df.lor.districts_to,by.x='to_district_spatial_na',by.y='to_lor_district_spatial_na')
 
-fwrite(df.merged,'data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed_and_exact_geo_and_districts.csv')
-```
-
-# add week.number / week OR weekend field and rounded hour :
-```{r}
-
-## clean env
-rm(list = ls())
-
-df <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed_and_exact_geo_and_districts.csv')
-
-
-# convert to datetime format :
-df$timestamp <- ymd_hms(df$timestamp)
-df$end_timestamp <- ymd_hms(df$end_timestamp)
-
-df$week.number <- lubridate::week(df$timestamp)
-df$date_only <- lubridate::date(df$timestamp)
-
-
-df$week.day.label <- wday(df$timestamp, label = TRUE,locale = "C")
-df$week.day.number <- wday(df$timestamp, label = FALSE)
-df <- df %>% mutate(is.weekend = ifelse(week.day.number %in% c(1,7),TRUE,FALSE))
-
-df$hour_of_day <- hour(df$timestamp)
-df <- df %>% mutate(is.working.hour = ifelse(hour_of_day %in% seq(7,20) & !is.weekend,TRUE,FALSE))
-df$timestamp_rounded <- round_date(df$timestamp, unit = "hour",
-  week_start = getOption("lubridate.week.start", 7))
-
-fwrite(df,'data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed_and_exact_geo_and_districts_and_time_data.csv')
+fwrite(df.merged,'data/bikes_preprocessed_with_districts_geodata.csv')
 ```
 
