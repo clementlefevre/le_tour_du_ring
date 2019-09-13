@@ -8,7 +8,9 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
 
 ```{r}
-dt <- fread('BikeSharing/data/preprocessed.csv')
+
+library(scales)
+dt <- fread('data/bikes_preprocessed_cleaned.csv')
 
 # drop dupes cols
 df<- dt[, which(duplicated(names(dt))) := NULL]
@@ -35,7 +37,21 @@ return (merged)
 
 
 # select a bike ID to plot the trip
-merged <- transpose.datetime(816054969)
+merged <- transpose.datetime(13001)
+
+if(!require("osmdata")) install.packages("osmdata")
+
+
+library(ggmap)
+mad_map <- get_map(getbb("Berlin"),maptype = 'terrain',source='osm')
+
+#final map
+p <- ggmap(mad_map)+ geom_point(data=merged %>% filter(date_only=='2019-07-02'),aes(bike_exact_longitude,bike_exact_latitude,color=(timestamp)),size=.2)+scale_color_gradient(high="red",low="blue",name = "Hour",trans = time_trans()) +geom_path(data=merged %>% filter(date_only=='2019-07-02'),aes(bike_exact_longitude,bike_exact_latitude,color=(timestamp)),size=0.1)+scale_color_gradient(high="red",low="blue",name = "Hour",trans = time_trans())
+p
+```
+## aggregate per bezirk
+```{r}
+
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
