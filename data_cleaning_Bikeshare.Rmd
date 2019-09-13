@@ -64,7 +64,7 @@ ID.sp.to <- NULL
 
 
 
-write.csv(df,'bikes_preprocessed_with_LOR.csv')
+write.csv(df,'data/bikes_preprocessed_with_LOR.csv')
 
 
 ```
@@ -124,14 +124,14 @@ ID.sp.to_district <- NULL
 
 
 
-write.csv(df,'bikes_preprocessed_with_LOR_and_districts.csv')
+write.csv(df,'data/bikes_preprocessed_with_LOR_and_districts.csv')
 
 
 ```
 # merge bikesharing trips with LOR and LOR Districts AND add status  duration
 ```{r}
-df.with.LOR <- fread('bikes_preprocessed_with_LOR.csv') %>% select(-V1)
-df.with.LOR.and.district <- fread('bikes_preprocessed_with_LOR_and_districts.csv') %>% select(-V1)
+df.with.LOR <- fread('data/bikes_preprocessed_with_LOR.csv') %>% select(-V1)
+df.with.LOR.and.district <- fread('data/bikes_preprocessed_with_LOR_and_districts.csv') %>% select(-V1)
 
 df <- merge(df.with.LOR,df.with.LOR.and.district,by='id')
 df.with.LOR<- NULL
@@ -141,11 +141,11 @@ df$timestamp <- ymd_hms(df$timestamp)
 df$end_timestamp <- ymd_hms(df$end_timestamp)
 df$duration_minutes <- difftime(df$end_timestamp, df$timestamp, units = "mins") %>% as.numeric()
 
-write.csv(df,'bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
+write.csv(df,'data/bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
 
 ```
 
-## Add distance of trips
+## Add distance and speed of trips
 ```{r}
 library(geosphere)
 df <- NULL
@@ -159,12 +159,76 @@ df$distance_direct <- distHaversine( df[, c('longitude', 'latitude')], df[, c('n
 
 df <- df %>% select(id,distance_direct)
 
-df.with.LOR.and.co <- fread('bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
+df.with.LOR.and.co <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
 df.with.LOR.and.co <- df.with.LOR.and.co %>% select(-V1)
 
 df <- merge(df.with.LOR.and.co,df,by='id')
 df.with.LOR.and.co <- NULL
-write.csv(df,'bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance.csv')
+
+## filter on Berlin LOR ID only :
+df <- df %>% filter(!is.na(from_spatial_na) & !is.na(to_spatial_na))
+
+df$speed <- df$distance_direct/1000 / (df$duration_minutes/60)
+fwrite(df,'data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed.csv')
+
+```
+## create a dataset of geodata of LOR and LOR districts
+```{r}
+## clean env
+rm(list = ls())
+
+library(rgeos)
+library(geosphere)
+
+# load dataset
+
+df <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed.csv')
+
+df <- df %>% filter(!providerId==2)
+
+# !!!! add leading zero to spatial_na's:
+df$from_spatial_na <- str_pad(df$from_spatial_na, 8, pad = "0")
+
+# LOR 
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/lor_planungsgraeume
+sp.lor    <- readOGR(dsn="data/shapefiles/LOR/",layer="lor_planungsraeume",encoding = "DE")
+
+# get data of LOR and compute centroids of each one :
+df.lor.data <- sp.lor@data
+df.lor.centroids <-  as.data.frame(centroid(sp.lor))
+colnames(df.lor.centroids)<- c('longitude_LOR','latitude_LOR')
+
+df.lor <- cbind(df.lor.data,df.lor.centroids)
+
+df.lor <- df.lor %>% select(spatial_na,spatial_al,PLRNAME,BZRNAME,PGRNAME,BEZNAME,longitude_LOR,latitude_LOR)
+
+p<-ggplot(df.lor.centroids,aes(longitude_LOR,latitude_LOR))+ geom_point()
+p
+
+write.csv(df.lor,'data/lor_geodata.csv')
+
+# LOR districts
+
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/ortsteile
+sp.lor.districts    <- readOGR(dsn="data/shapefiles/LOR_Ortsteile/",layer="lor_ortsteile",encoding = "DE")
+
+# get data of LOR and compute centroids of each one :
+df.lor.districts.data <- sp.lor.districts@data
+df.lor.districts.centroids <-  as.data.frame(centroid(sp.lor.districts))
+colnames(df.lor.districts.centroids)<- c('longitude_LOR_district','latitude_LOR_district')
+
+df.lor.districts <- cbind(df.lor.districts.data,df.lor.districts.centroids)
+
+df.lor.districts <- df.lor.districts %>% select(spatial_na,spatial_al,PLRNAME,BZRNAME,PGRNAME,BEZNAME,longitude_LOR,latitude_LOR)
+
+write.csv(df.lor.districts,'data/lor_districts_geodata.csv')
+
+p<-ggplot(df.lor.districts.centroids,aes(longitude_LOR_district,latitude_LOR_district))+ geom_point()
+p + annotate("point", y = 52.39229, x = 13.51954, colour = "blue")+annotate("point", y = 52.39229, x = 13.51959, colour = "red")
+
+
+
+
 
 ```
 
