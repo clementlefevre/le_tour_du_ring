@@ -4,7 +4,7 @@ library(shiny)
 library(deckgl)
 library(dplyr)
 
-Sys.setenv(MAPBOX_API_TOKEN = "pk.eyJ1IjoidGVjaG5vbG9naWVzdGlmdHVuZyIsImEiOiJjazBkeDduY3kwMW8zM2ZwbGgwb3kxbnNwIn0.CmASst9JC6hSpILBFQHNig")
+Sys.setenv(MAPBOX_API_TOKEN = "coucou")
 
 sample_data <- bart_segments
 df <-read.csv('bvg_flat.csv',nrows = 300, stringsAsFactors = F) %>% na.omit(from_lat)
