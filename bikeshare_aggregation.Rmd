@@ -6,6 +6,11 @@ output: html_notebook
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2)
+
+```
 
 ```{r}
 
@@ -49,13 +54,66 @@ mad_map <- get_map(getbb("Berlin"),maptype = 'terrain',source='osm')
 p <- ggmap(mad_map)+ geom_point(data=merged %>% filter(date_only=='2019-07-02'),aes(bike_exact_longitude,bike_exact_latitude,color=(timestamp)),size=.2)+scale_color_gradient(high="red",low="blue",name = "Hour",trans = time_trans()) +geom_path(data=merged %>% filter(date_only=='2019-07-02'),aes(bike_exact_longitude,bike_exact_latitude,color=(timestamp)),size=0.1)+scale_color_gradient(high="red",low="blue",name = "Hour",trans = time_trans())
 p
 ```
-## aggregate per bezirk
+## aggregate per LOR,Ortsteil, mode, 
 ```{r}
+df <- fread('data/bikes_preprocessed_cleaned.csv')
 
+groupy <- df %>% group_by(date_only,from_spatial_na,from_district_spatial_na,to_spatial_na,to_district_spatial_na,mode,hour_of_day,week.day.label) %>% summarise(total_counts=n(), median.duration=median(duration_minutes),median.speed=median(speed))
+
+df<-NULL
+
+# load geo data from LOR 
+df.lor <- fread('data/lor_geodata.csv') %>% select(-V1,-spatial_al,-BZRNAME,-PGRNAME) 
+df.lor.from <- df.lor
+colnames(df.lor.from)<- paste0('LOR_from_',colnames(df.lor.from))
+
+df.lor.to <- df.lor
+colnames(df.lor.to)<- paste0('LOR_to_',colnames(df.lor.to))
+
+
+# load geo data from LOR districts
+df.districts <- fread('data/lor_districts_geodata.csv') %>% select(-V1,-spatial_al)
+
+df.districts.from <- df.districts
+colnames(df.districts.from)<- paste0('district_from_',colnames(df.districts.from))
+
+df.districts.to <- df.districts
+colnames(df.districts.to)<- paste0('district_to_',colnames(df.districts.to))
+
+#add from LOR & dictrict Names and Centroids :
+merged <- merge(groupy,df.districts.from,by.x='from_district_spatial_na',by.y='district_from_spatial_na')
+merged <- merge(merged,df.districts.to,by.x='to_district_spatial_na',by.y='district_to_spatial_na')
+
+merged <- merge(merged,df.lor.from,by.x='from_spatial_na',by.y='LOR_from_spatial_na')
+merged <- merge(merged,df.lor.to,by.x='to_spatial_na',by.y='LOR_to_spatial_na')
+
+fwrite(merged,'data/bikes_lor_and_districs_aggregated.csv')
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+# aggregate per districs and hour of day
+```{r}
+df <- fread('data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip')
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+groupy <- df %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,hour_of_day,is.weekend) %>% summarise(total_counts=n())
+
+df<-NULL
+
+
+# load geo data from LOR districts
+df.districts <- fread('data/lor_districts_geodata.csv') %>% select(-V1,-spatial_al)
+
+df.districts.from <- df.districts
+colnames(df.districts.from)<- paste0('district_from_',colnames(df.districts.from))
+
+df.districts.to <- df.districts
+colnames(df.districts.to)<- paste0('district_to_',colnames(df.districts.to))
+
+#add from LOR & dictrict Names and Centroids :
+merged <- merge(groupy,df.districts.from,by.x='from_district_spatial_na',by.y='district_from_spatial_na')
+merged <- merge(merged,df.districts.to,by.x='to_district_spatial_na',by.y='district_to_spatial_na')
+
+
+fwrite(merged,'data/trips_districs_hour_weekend_aggregated.csv')
+```
+
