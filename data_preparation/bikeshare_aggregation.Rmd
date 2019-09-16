@@ -120,7 +120,7 @@ ggplot(groupy.per_date_only %>% filter(from_district_spatial_na %in%c(101,202,40
 ```
 
 
-# aggregate per district and hour of day
+# aggregate trips per district and hour of day
 ```{r}
 
 df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip' & hour_of_day!=4) 
@@ -156,39 +156,18 @@ fwrite(merged,'../data/trips_districts_hour_weekend_aggregated.csv')
 ## aggregate per accessibilite duration and count  per lor/district:
 
 ```{r}
-df <- fread('data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='accessible')
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='accessible' & hour_of_day!=4)
 
-groupy.district <- df %>% group_by(from_district_spatial_na,hour_of_day,is.weekend) %>% summarise(total_counts=n(),median_duration=median(duration_minutes))
-
-groupy.lor <- df %>% group_by(from_spatial_na,hour_of_day,is.weekend) %>% summarise(total_counts=n(),median_duration=median(duration_minutes))
+df$time_interval <- cut(df$hour_of_day, breaks=c(0,6,12,18,23), include.lowest=TRUE,labels = c("Night", "Morning",'Noon','Evening'))
 
 
-fwrite(groupy.district,'data/accessible_districts_hour_weekend_aggregated.csv')
+groupy.lor.per_date_only <- df %>% group_by(from_spatial_na,date_only,time_interval,is.weekend) %>% summarise(total_counts=n(),median_duration=median(duration_minutes))
 
-fwrite(groupy.lor,'data/accessible_lor_hour_weekend_aggregated.csv')
+groupy.lor.overall <- groupy.lor.per_date_only %>% group_by(from_spatial_na,time_interval,is.weekend) %>% summarise(median_counts=median(total_counts),median_duration=median(median_duration))
+
+
+
+fwrite(groupy.lor.overall,'../data/accessible_lor_hour_weekend_aggregated.csv')
 df<-NULL
-```
-
-## heatmap
-```{r}
-library(leaflet)
-library(leaflet.extras)
-
-df <- fread('data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='accessible') %>% filter(date_only=='2019-07-01')
-df$rounded.lat <- round(df$bike_exact_latitude,3)
-df$rounded.lon <- round(df$bike_exact_longitude,3)
-
-groupy <- df %>% group_by(rounded.lat,rounded.lon,hour_of_day) %>% summarise(total = n())
-
-fwrite(groupy,'data/bikes_locations_rounded_test.csv')
-
-leaflet(groupy) %>%  setView(13.3666652,52.5166646, zoom = 11) %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
- 
-   addCircleMarkers(
-    lng = ~rounded.lon, lat = ~rounded.lat, radius = ~total,stroke = FALSE, fillOpacity = 0.5
-   
-  )
-
 ```
 

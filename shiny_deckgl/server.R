@@ -29,20 +29,33 @@ properties.flows <- list(
 
     
 )
+# 
+# properties.availability <- list(
+#     filled = TRUE,
+#     extruded = TRUE,
+#     stroked = FALSE,
+#     getElevation =  JS("data => data.properties.median_counts"),#1000*2,
+#     lineWidthScale = 20,
+#     lineWidthMinPixels = 10,
+#     getLineWidth = 100,
+#     getLineColor = c(255,255,255),
+#     elevationScale = 10,
+#     getFillColor = JS("data => [data.properties.median_duration,  0,0]"),
+#     # getFillColor = JS("data => data.properties.AREA > 0.2 ? [240, 140, 10] : [210, 80, 20]"), #c(160, 160, 180, 200),
+#     getTooltip = JS("object => `${object.properties.PLRNAME}<br/>Median Duration (mn): ${object.properties.median_duration}<br/>Median Total bikes: ${object.properties.median_counts}`")
+# )
 
 properties.availability <- list(
-    filled = TRUE,
-    extruded = TRUE,
-    stroked = FALSE,
-    getElevation =  JS("data => data.properties.total_counts"),#1000*2,
-    lineWidthScale = 20,
-    lineWidthMinPixels = 1,
-    getLineWidth = 10,
-    getLineColor = c(165, 42, 42),
-    elevationScale = 10,
-    getFillColor = JS("data => [data.properties.median_duration,  0,0]"),
-    # getFillColor = JS("data => data.properties.AREA > 0.2 ? [240, 140, 10] : [210, 80, 20]"), #c(160, 160, 180, 200),
-    getTooltip = JS("object => `${object.properties.PLRNAME}<br/>Median Duration (mn): ${object.properties.median_duration}<br/>Total bikes: ${object.properties.total_counts}`")
+  filled = TRUE,
+  extruded = TRUE,
+  getRadius = 100,
+  lineWidthScale = 20,
+  lineWidthMinPixels = 2,
+  getLineWidth = 10,
+  getLineColor = c(255,255,255,255),#get_color_to_rgb_array("'red'"),
+  getFillColor = c(160, 160, 180, 200),
+  getElevation =  JS("data => data.properties.median_counts_10"),
+  elevationScale = 10
 )
 
 
@@ -96,9 +109,9 @@ shinyServer(function(input, output) {
     })
     
     availability <- eventReactive(c(input$hour_filter, input$is.weekend),{
-      
-            filtered.df <-    df.accessible %>% dplyr::filter(hour_of_day==input$time_interval & is.weekend==input$is.weekend)
-  
+
+            filtered.df <-    df.accessible %>% dplyr::filter(time_interval==input$hour_filter & is.weekend==input$is.weekend)
+
             sp.merged  <- sp::merge(sp.lor,filtered.df,by.x='spatial_na',by.y='from_spatial_na',all.y=T)
             nc_geojson <- geojsonio::geojson_json(sp.merged)
             nc_geojson

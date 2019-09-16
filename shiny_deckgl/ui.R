@@ -8,7 +8,7 @@
 #
 
 library(shiny)
-library(shinythemes)
+
 library(deckgl)
 
 
@@ -16,7 +16,7 @@ anim.options <- animationOptions(interval = 2000, loop = TRUE, playButton = NULL
                                  pauseButton = NULL)
 
 # Define UI for application that draws a histogram
-shinyUI(fluidPage(
+shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
     h3("sharing is biking"),
     
     tabsetPanel(type = "tabs",
@@ -26,7 +26,10 @@ shinyUI(fluidPage(
                                                    "Availability" = 'availability'))
                          ,
                          
-                         fluidRow(column(3, radioButtons(
+                         fluidRow(
+                        
+                            
+                             column(3, radioButtons(
                              "direction", "direction",
                              c("FROM" = TRUE,
                                "TO" = FALSE)

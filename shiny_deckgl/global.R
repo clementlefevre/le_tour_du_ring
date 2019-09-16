@@ -7,7 +7,7 @@ library(stringr)
 library(data.table)
 library(leaflet)
 library(lubridate)
-library(dplyr)
+
 
 
 # trips data
@@ -22,12 +22,13 @@ hour_filter <- unique(df$time_interval)
 
 # accessibility data
 sp.lor    <- readOGR(dsn="data/shapefiles/LOR/",layer="lor_planungsraeume",encoding = "DE")
-df.accessible <- read.csv('data/accessible_lor_hour_weekend_aggregated.csv')
+df.accessible <- read.csv('data/accessible_lor_hour_weekend_aggregated.csv',stringsAsFactors = FALSE)
+
 
 df.accessible$from_spatial_na <- str_pad(df.accessible$from_spatial_na,width=8,pad='0')
 
 df.accessible$median_duration <- round(df.accessible$median_duration,0)
-
+df.accessible$median_counts_10 <- df.accessible$median_counts*100
 
 nc_geojson <- NULL
 
