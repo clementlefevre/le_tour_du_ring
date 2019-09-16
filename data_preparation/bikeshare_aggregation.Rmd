@@ -104,16 +104,34 @@ fwrite(merged,'data/bikes_lor_and_districs_aggregated.csv')
 ```
 
 
-# aggregate per district and hour of day
+# analyze the number of per trip per rounded hour : (show that 4AM is an outlier)
 ```{r}
 df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip')
 
+df$timestamp_rounded <- ymd_hms(df$timestamp_rounded)
 
-groupy.per_date_only <- df %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,hour_of_day,is.weekend,date_only) %>% summarise(total_counts=n())
+groupy.per_date_only <- df %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,timestamp_rounded,is.weekend) %>% summarise(total_counts=n())
 
-ggplot(groupy.per_data %>% filter(from_district_spatial_na==101),aes(date_only,total_counts))+ geom_point()
 
-groupy <- groupy.per_data %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,hour_of_day,is.weekend) %>% summarise(median_trips_count=median(total_counts))
+
+groupy.per_date_only$hour_of_day <- hour(groupy.per_date_only$timestamp_rounded)
+
+ggplot(groupy.per_date_only %>% filter(from_district_spatial_na %in%c(101,202,401)),aes(timestamp_rounded,total_counts,color=hour_of_day==4))+ geom_text(aes(label=as.character(hour_of_day)))+facet_wrap(.~from_district_spatial_na)
+```
+
+
+# aggregate per district and hour of day
+```{r}
+
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip' & hour_of_day!=4) 
+
+
+df$time_interval <- cut(df$hour_of_day, breaks=c(0,6,12,18,23), include.lowest=TRUE,labels = c("Night", "Morning",'Noon','Evening'))
+
+groupy.per_date_only <- df %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,date_only,time_interval,is.weekend) %>% summarise(total_counts=n())
+
+
+groupy.per_time_interval <- groupy.per_date_only %>% ungroup() %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,time_interval,is.weekend) %>% summarise(median_trips_count=median(total_counts))
 
 df<-NULL
 
@@ -127,7 +145,7 @@ df.districts.to <- df.districts
 colnames(df.districts.to)<- paste0('district_to_',colnames(df.districts.to))
 
 #add from LOR & dictrict Names and Centroids :
-merged <- merge(groupy,df.districts.from,by.x='from_district_spatial_na',by.y='district_from_spatial_na')
+merged <- merge(groupy.per_time_interval,df.districts.from,by.x='from_district_spatial_na',by.y='district_from_spatial_na')
 merged <- merge(merged,df.districts.to,by.x='to_district_spatial_na',by.y='district_to_spatial_na')
 
 

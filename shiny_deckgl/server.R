@@ -19,12 +19,15 @@ source('key.R')
 
 
 properties.flows <- list(
-    getWidth = ~total_counts,
+    getWidth = ~median_trips_count,
     pickable = TRUE,
     getSourceColor = JS("d => [Math.sqrt(d.inbound), 255,127]"),
     getTargetColor = JS("d => [255, 0, 0]"),
     getSourcePosition = ~from_lng + from_lat,
     getTargetPosition = ~to_lng + to_lat
+    
+
+    
 )
 
 properties.availability <- list(
@@ -65,26 +68,43 @@ shinyServer(function(input, output) {
         print(names(info$object))
     })
     
-    trips <- eventReactive(c(input$ortsteil,input$hour_filter, input$is.weekend,input$direction),{
+    trips <- eventReactive(c(input$ortsteil.from,input$ortsteil.to,input$hour_filter, input$is.weekend,input$direction),{
         if(input$direction==TRUE){
-            filtered.df <-    df %>% filter(district_from_OTEIL==input$ortsteil & hour_of_day==input$hour_filter & is.weekend==input$is.weekend)  
+          
+          if(input$ortsteil.to=='ALL'){
+            filtered.df <-    df %>% filter(district_from_OTEIL==input$ortsteil.from & time_interval==input$hour_filter & is.weekend==input$is.weekend)  
+            
+          }else{
+            filtered.df <-    df %>% filter(district_from_OTEIL==input$ortsteil.from & district_to_OTEIL==input$ortsteil.to & time_interval==input$hour_filter & is.weekend==input$is.weekend)  
+            
+          }
         } else{
-            filtered.df <-    df %>% filter(district_to_OTEIL==input$ortsteil & hour_of_day==input$hour_filter & is.weekend==input$is.weekend)  
+          if(input$ortsteil.to=='ALL'){
+            filtered.df <-    df %>% filter(district_to_OTEIL==input$ortsteil.from  & time_interval==input$hour_filter & is.weekend==input$is.weekend)  
+            
+          }else{
+            filtered.df <-    df %>% filter(district_to_OTEIL==input$ortsteil.from & district_from_OTEIL==input$ortsteil.to & time_interval==input$hour_filter & is.weekend==input$is.weekend)  
+            
+          }
         }
         
         filtered.df
     })
     
+    output$bike_flow <- renderText({ 
+      trips()$median_trips_count
+    })
+    
     availability <- eventReactive(c(input$hour_filter, input$is.weekend),{
       
-            filtered.df <-    df.accessible %>% dplyr::filter(hour_of_day==input$hour_filter & is.weekend==input$is.weekend)
+            filtered.df <-    df.accessible %>% dplyr::filter(hour_of_day==input$time_interval & is.weekend==input$is.weekend)
   
             sp.merged  <- sp::merge(sp.lor,filtered.df,by.x='spatial_na',by.y='from_spatial_na',all.y=T)
             nc_geojson <- geojsonio::geojson_json(sp.merged)
             nc_geojson
     })
     
-    observeEvent(c(input$maptype,input$ortsteil,input$hour_filter, input$is.weekend,input$direction), {
+    observeEvent(c(input$maptype,input$ortsteil.from,input$ortsteil.to,input$hour_filter, input$is.weekend,input$direction), {
       if(input$maptype=='flows'){
         deckgl_proxy("flows") %>%
           add_arc_layer(
@@ -120,7 +140,7 @@ shinyServer(function(input, output) {
     observe({
     
       m.start <-
-        leafletProxy("map.locations", data = df.locations.nearest.hour %>% filter(hour_of_day==input$time)) %>%
+        leafletProxy("map.locations", data = df.locations.nearest.hour %>% filter(timestamp==input$time)) %>%
         clearMarkers()       %>%
         addCircleMarkers(
           lng = ~rounded.lon, lat = ~rounded.lat, radius = ~total,stroke = FALSE, fillOpacity = 0.5,color = ~pal(mode))

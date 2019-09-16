@@ -7,14 +7,17 @@ library(stringr)
 library(data.table)
 library(leaflet)
 library(lubridate)
+library(dplyr)
 
 
 # trips data
-df <-read.csv('data/trips_districs_hour_weekend_aggregated.csv', stringsAsFactors = F)
+df <-read.csv('data/trips_districts_hour_weekend_aggregated.csv', stringsAsFactors = F)
 df <- df %>% select(from_lng = district_from_longitude_LOR_district,from_lat=district_from_latitude_LOR_district,to_lng=district_to_longitude_LOR_district,to_lat=district_to_latitude_LOR_district,everything())
-
+df$median_trips_count_10<-df$median_trips_count*10
 from.districts <- unique(df$district_from_OTEIL) %>% sort()
-hour_filter <- unique(df$hour_of_day)
+to.districts <- unique(df$district_to_OTEIL) %>% sort()
+to.districts <- c('ALL',to.districts)
+hour_filter <- unique(df$time_interval)
 
 
 # accessibility data
@@ -31,7 +34,7 @@ nc_geojson <- NULL
 
 # locations rounded
 #df.locations.rounded <- fread('../data/bikes_locations_rounded_test.csv')
-df.locations.nearest.hour <- fread('data/bikes_nearest_hour.csv')
-df.locations.nearest.hour <- df.locations.nearest.hour
+df.locations.nearest.hour <- fread('data/bikes_nearest_10_minutes.csv')
+df.locations.nearest.hour$timestamp <- ymd_hms(df.locations.nearest.hour$timestamp)
 
 

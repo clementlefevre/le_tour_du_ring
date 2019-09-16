@@ -26,12 +26,21 @@ shinyUI(fluidPage(
                                                    "Availability" = 'availability'))
                          ,
                          
-                         fluidRow(
+                         fluidRow(column(3, radioButtons(
+                             "direction", "direction",
+                             c("FROM" = TRUE,
+                               "TO" = FALSE)
+                         )),
                              column(
                                  3,
-                                 selectInput("ortsteil", "FROM Ortsteil :",
+                                 selectInput("ortsteil.from", "FROM :",
                                              choices = from.districts)
                              ),
+                         column(
+                             3,
+                             selectInput("ortsteil.to", "TO :",
+                                         choices = to.districts)
+                         ),
                              column(
                                  3,
                                  selectInput("hour_filter", "Hour of day :",
@@ -41,20 +50,16 @@ shinyUI(fluidPage(
                                  "is.weekend", "is week end :",
                                  c("YES" = TRUE,
                                    "NO" = FALSE)
-                             )),
-                             column(3, radioButtons(
-                                 "direction", "direction",
-                                 c("FROM" = TRUE,
-                                   "TO" = FALSE)
-                             ))
+                             )),textOutput("bike_flow")
+                          
                          ),        deckglOutput("flows")
                 ),
                 tabPanel("Anim", sliderInput(
                     "time",
                     "date",
-                    0,
-                    23,
-                    value =8,
+                    min(df.locations.nearest.hour$timestamp),
+                    max(df.locations.nearest.hour$timestamp),
+                    value =min(df.locations.nearest.hour$timestamp),
                     step = 1,
                     animate = anim.options
                 ),leafletOutput("map.locations") 
