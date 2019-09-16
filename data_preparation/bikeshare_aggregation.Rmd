@@ -1,0 +1,176 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2)
+```
+## round bike state to the nearest hour/10mn
+```{r}
+library(scales)
+library(purrr)
+dt <- fread('data/bikes_preprocessed_cleaned.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL]
+df$timestamp<- ymd_hms(df$timestamp)
+df$end_timestamp<- ymd_hms(df$end_timestamp)
+
+df <- df %>% filter(date_only>'2019-07-01' & date_only<'2019-07-04' )
+ df.test <- df %>% filter(bikeId==13005)
+
+transpose.datetime <- function(id_bike){
+ df.test <- df %>% filter(bikeId==id_bike)
+
+datetime.index <-seq(from = ISOdatetime(2019,07,3,0,0,0),to=ISOdatetime(2019,07,3,23,0,0), by = "10 min") %>% as.data.frame()
+colnames(datetime.index)<-c('dt.index')
+
+setDT(df.test)
+setDT(datetime.index)
+setkey(df.test,  timestamp)[, dateMatch:=timestamp]
+
+merged <-df.test[datetime.index, roll='nearest']
+
+return (merged)
+}
+
+df_nearest_hour <- unique(df$bikeId) %>% map_dfr(transpose.datetime)
+
+df_nearest_hour$hour_of_day <- hour(df_nearest_hour$timestamp)
+
+df_nearest_hour$rounded.lat <- round(df_nearest_hour$bike_exact_latitude,3)
+df_nearest_hour$rounded.lon <- round(df_nearest_hour$bike_exact_longitude,3)
+
+groupy <- df_nearest_hour %>% group_by(rounded.lat,rounded.lon,timestamp,mode) %>% summarise(total = n())
+
+fwrite(groupy,'data/bikes_nearest_10_minutes.csv')
+
+
+```
+ 
+ 
+# plot bike paths
+```{r}
+if(!require("osmdata")) install.packages("osmdata")
+
+
+library(ggmap)
+mad_map <- get_map(getbb("Berlin"),maptype = 'terrain',source='osm')
+
+#final map
+p <- ggmap(mad_map)+ geom_point(data=merged %>% filter(date_only=='2019-07-02'),aes(bike_exact_longitude,bike_exact_latitude,color=(timestamp)),size=.2)+scale_color_gradient(high="red",low="blue",name = "Hour",trans = time_trans()) +geom_path(data=merged %>% filter(date_only=='2019-07-02'),aes(bike_exact_longitude,bike_exact_latitude,color=(timestamp)),size=0.1)+scale_color_gradient(high="red",low="blue",name = "Hour",trans = time_trans())
+p
+```
+
+## aggregate per LOR,Ortsteil, mode, 
+```{r}
+df <- fread('data/bikes_preprocessed_cleaned.csv')
+
+groupy <- df %>% group_by(date_only,from_spatial_na,from_district_spatial_na,to_spatial_na,to_district_spatial_na,mode,hour_of_day,week.day.label) %>% summarise(total_counts=n(), median.duration=median(duration_minutes),median.speed=median(speed))
+
+df<-NULL
+
+# load geo data from LOR 
+df.lor <- fread('data/lor_geodata.csv') %>% select(-V1,-spatial_al,-BZRNAME,-PGRNAME) 
+df.lor.from <- df.lor
+colnames(df.lor.from)<- paste0('LOR_from_',colnames(df.lor.from))
+
+df.lor.to <- df.lor
+colnames(df.lor.to)<- paste0('LOR_to_',colnames(df.lor.to))
+
+
+# load geo data from LOR districts
+df.districts <- fread('data/lor_districts_geodata.csv') %>% select(-V1,-spatial_al)
+
+df.districts.from <- df.districts
+colnames(df.districts.from)<- paste0('district_from_',colnames(df.districts.from))
+
+df.districts.to <- df.districts
+colnames(df.districts.to)<- paste0('district_to_',colnames(df.districts.to))
+
+#add from LOR & dictrict Names and Centroids :
+merged <- merge(groupy,df.districts.from,by.x='from_district_spatial_na',by.y='district_from_spatial_na')
+merged <- merge(merged,df.districts.to,by.x='to_district_spatial_na',by.y='district_to_spatial_na')
+
+merged <- merge(merged,df.lor.from,by.x='from_spatial_na',by.y='LOR_from_spatial_na')
+merged <- merge(merged,df.lor.to,by.x='to_spatial_na',by.y='LOR_to_spatial_na')
+
+fwrite(merged,'data/bikes_lor_and_districs_aggregated.csv')
+```
+
+
+# aggregate per district and hour of day
+```{r}
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip')
+
+
+groupy.per_date_only <- df %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,hour_of_day,is.weekend,date_only) %>% summarise(total_counts=n())
+
+ggplot(groupy.per_data %>% filter(from_district_spatial_na==101),aes(date_only,total_counts))+ geom_point()
+
+groupy <- groupy.per_data %>% group_by(from_district_spatial_na,to_district_spatial_na,mode,hour_of_day,is.weekend) %>% summarise(median_trips_count=median(total_counts))
+
+df<-NULL
+
+# load geo data from LOR districts
+df.districts <- fread('../data/lor_districts_geodata.csv') %>% select(-V1,-spatial_al)
+
+df.districts.from <- df.districts
+colnames(df.districts.from)<- paste0('district_from_',colnames(df.districts.from))
+
+df.districts.to <- df.districts
+colnames(df.districts.to)<- paste0('district_to_',colnames(df.districts.to))
+
+#add from LOR & dictrict Names and Centroids :
+merged <- merge(groupy,df.districts.from,by.x='from_district_spatial_na',by.y='district_from_spatial_na')
+merged <- merge(merged,df.districts.to,by.x='to_district_spatial_na',by.y='district_to_spatial_na')
+
+
+fwrite(merged,'../data/trips_districts_hour_weekend_aggregated.csv')
+```
+
+
+## aggregate per accessibilite duration and count  per lor/district:
+
+```{r}
+df <- fread('data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='accessible')
+
+groupy.district <- df %>% group_by(from_district_spatial_na,hour_of_day,is.weekend) %>% summarise(total_counts=n(),median_duration=median(duration_minutes))
+
+groupy.lor <- df %>% group_by(from_spatial_na,hour_of_day,is.weekend) %>% summarise(total_counts=n(),median_duration=median(duration_minutes))
+
+
+fwrite(groupy.district,'data/accessible_districts_hour_weekend_aggregated.csv')
+
+fwrite(groupy.lor,'data/accessible_lor_hour_weekend_aggregated.csv')
+df<-NULL
+```
+
+## heatmap
+```{r}
+library(leaflet)
+library(leaflet.extras)
+
+df <- fread('data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='accessible') %>% filter(date_only=='2019-07-01')
+df$rounded.lat <- round(df$bike_exact_latitude,3)
+df$rounded.lon <- round(df$bike_exact_longitude,3)
+
+groupy <- df %>% group_by(rounded.lat,rounded.lon,hour_of_day) %>% summarise(total = n())
+
+fwrite(groupy,'data/bikes_locations_rounded_test.csv')
+
+leaflet(groupy) %>%  setView(13.3666652,52.5166646, zoom = 11) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+ 
+   addCircleMarkers(
+    lng = ~rounded.lon, lat = ~rounded.lat, radius = ~total,stroke = FALSE, fillOpacity = 0.5
+   
+  )
+
+```
+

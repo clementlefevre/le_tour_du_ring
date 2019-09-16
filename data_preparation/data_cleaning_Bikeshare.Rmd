@@ -1,0 +1,326 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2)
+
+```
+## Add the LOR ID to the Bikesharing data
+```{r}
+
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/lor_planungsgraeume
+sp.lor    <- readOGR(dsn="data/shapefiles/LOR/",layer="lor_planungsraeume",encoding = "DE")
+
+# load the original Bikesharing file : (source :https://drive.google.com/drive/folders/1wsXVdBxhKSqpj-fouNM9RbF7NFrLHUvO)
+dt <- fread('BikeSharing/data/preprocessed.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL] #%>% head(10000)
+dt <- NULL
+
+table(df$providerId)
+
+# drop bikeproviderId ==2: which is 80% of all rows !!!
+df <- df %>% filter(!providerId==2)
+
+# set the projection system for the bikesharing coordinates :
+xy.from <- df %>% select(longitude,latitude)
+xy.to <- df %>% select(next_lon,next_lat)
+
+# create a Spatial
+spdf.from <- SpatialPointsDataFrame(coords = xy.from, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+spdf.to <- SpatialPointsDataFrame(coords = xy.to, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+
+# clear memory of unused items
+xy.from <- NULL
+xy.to <- NULL
+
+ID.sp.from <- sp::over(spdf.from,sp.lor) %>% select(spatial_na)
+
+# clear memory
+spdf.from <- NULL
+colnames(ID.sp.from)<- paste0('from_',colnames(ID.sp.from))
+
+ID.sp.to <- sp::over(spdf.to,sp.lor) %>% select(spatial_na)
+
+# clear memory
+spdf.to <- NULL
+colnames(ID.sp.to)<- paste0('to_',colnames(ID.sp.to))
+
+# keep only relevant columns from the bikeshare (we do not need the geocordinates anymore):
+df <- df %>% select(id,bikeId,providerId,timestamp, prev_id,next_id,end_timestamp,mode)
+
+df <- cbind(df,ID.sp.from,ID.sp.to)
+
+# clear memory
+ID.sp.from <- NULL
+ID.sp.to <- NULL
+
+sp.lor <- NULL
+
+fwrite(df,'data/bikes_preprocessed_with_LOR.csv')
+```
+
+## Add Ortsteile (District) ID to the Bikesharing data
+```{r}
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/ortsteile
+sp.lor.districts    <- readOGR(dsn="data/shapefiles/LOR_Ortsteile/",layer="lor_ortsteile",encoding = "DE")
+
+dt <- fread('BikeSharing/data/preprocessed.csv')
+
+# drop dupes cols
+df<- dt[, which(duplicated(names(dt))) := NULL] 
+dt <- NULL
+
+# drop bikeproviderId ==2: which is 80% of all rows !!!
+df <- df %>% filter(!providerId==2)
+
+df <- df %>% select(id,latitude,longitude,next_lat,next_lon)
+
+# set the projection system for the bikesharing coordinates :
+xy.from <- df %>% select(longitude,latitude)
+xy.to <- df %>% select(next_lon,next_lat)
+
+# create a Spatial
+spdf.from <- SpatialPointsDataFrame(coords = xy.from, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+spdf.to <- SpatialPointsDataFrame(coords = xy.to, data = df,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "))
+
+
+# clear memory of unused items
+xy.from <- NULL
+xy.to <- NULL
+
+ID.sp.from_district <- sp::over(spdf.from,sp.lor.districts) %>% select(spatial_na)
+colnames(ID.sp.from_district)<- paste0('from_district_',colnames(ID.sp.from_district))
+
+# clear memory
+spdf.from<- NULL
+
+ID.sp.to_district <- sp::over(spdf.to,sp.lor.districts) %>% select(spatial_na)
+
+#clear memory
+spdf.to <- NULL
+colnames(ID.sp.to_district)<- paste0('to_district_',colnames(ID.sp.to_district))
+
+
+# keep only relevant columns from the bikeshare (we do not need the geocordinates anymore):
+df <- df %>% select(id)
+
+df <- cbind(df,ID.sp.from_district,ID.sp.to_district)
+
+# clear memory
+ID.sp.from_district <- NULL
+ID.sp.to_district <- NULL
+
+fwrite(df,'data/bikes_preprocessed_with_LOR_and_districts.csv')
+```
+# merge bikesharing trips with LOR and LOR Districts AND add status  duration
+```{r}
+df.with.LOR <- fread('data/bikes_preprocessed_with_LOR.csv')
+df.with.LOR.and.district <- fread('data/bikes_preprocessed_with_LOR_and_districts.csv') 
+
+df <- merge(df.with.LOR,df.with.LOR.and.district,by='id')
+df.with.LOR<- NULL
+df.with.LOR.and.district <- NULL
+
+df$timestamp <- ymd_hms(df$timestamp)
+df$end_timestamp <- ymd_hms(df$end_timestamp)
+df$duration_minutes <- difftime(df$end_timestamp, df$timestamp, units = "mins") %>% as.numeric()
+
+fwrite(df,'data/bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
+
+```
+
+## Add distance and speed of trips
+```{r}
+library(geosphere)
+df <- NULL
+dt <- fread('BikeSharing/data/preprocessed.csv')
+df<- dt[, which(duplicated(names(dt))) := NULL]
+dt <- NULL
+
+# drop bikeproviderId ==2: which is 80% of all rows !!!
+df <- df %>% filter(!providerId==2)
+
+df <- df %>% select(id,longitude,latitude,next_lon,next_lat)
+
+
+df$distance_direct <- distHaversine( df[, c('longitude', 'latitude')], df[, c('next_lon', 'next_lat')])
+
+df <- df %>% select(id,distance_direct)
+
+df.with.LOR.and.co <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration.csv')
+df.with.LOR.and.co <- df.with.LOR.and.co 
+
+df <- merge(df.with.LOR.and.co,df,by='id')
+df.with.LOR.and.co <- NULL
+
+## filter on Berlin LOR ID only :
+df <- df %>% filter(!is.na(from_spatial_na) & !is.na(to_spatial_na))
+
+df$speed <- df$distance_direct/1000 / (df$duration_minutes/60)
+fwrite(df,'data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed.csv')
+
+```
+
+
+## create a dataset of geodata of LOR and LOR districts
+```{r}
+## clean env
+rm(list = ls())
+
+library(rgeos)
+library(geosphere)
+
+# load shapefiles
+
+# LOR 
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/lor_planungsgraeume
+sp.lor    <- readOGR(dsn="data/shapefiles/LOR/",layer="lor_planungsraeume",encoding = "DE")
+
+# get data of LOR and compute centroids of each one :
+df.lor.data <- sp.lor@data
+df.lor.centroids <-  as.data.frame(centroid(sp.lor))
+colnames(df.lor.centroids)<- c('longitude_LOR','latitude_LOR')
+
+df.lor <- cbind(df.lor.data,df.lor.centroids)
+
+df.lor <- df.lor %>% select(spatial_na,spatial_al,PLRNAME,BZRNAME,PGRNAME,BEZNAME,longitude_LOR,latitude_LOR)
+
+p<-ggplot(df.lor.centroids,aes(longitude_LOR,latitude_LOR))+ geom_point()
+p
+
+write.csv(df.lor,'data/lor_geodata.csv')
+
+# LOR districts
+
+# load LOR ESRI shapefile data from https://data.technologiestiftung-berlin.de/dataset/ortsteile
+sp.lor.districts    <- readOGR(dsn="data/shapefiles/LOR_Ortsteile/",layer="lor_ortsteile",encoding = "DE")
+
+# get data of LOR and compute centroids of each one :
+df.lor.districts.data <- sp.lor.districts@data
+df.lor.districts.centroids <-  as.data.frame(centroid(sp.lor.districts))
+colnames(df.lor.districts.centroids)<- c('longitude_LOR_district','latitude_LOR_district')
+
+df.lor.districts <- cbind(df.lor.districts.data,df.lor.districts.centroids)
+
+df.lor.districts <- df.lor.districts %>% select(spatial_na,spatial_al,OTEIL,BEZIRK,longitude_LOR_district,latitude_LOR_district)
+
+write.csv(df.lor.districts,'data/lor_districts_geodata.csv')
+
+p<-ggplot(df.lor.districts.centroids,aes(longitude_LOR_district,latitude_LOR_district))+ geom_point()
+p + annotate("point", y = 52.39229, x = 13.51954, colour = "blue")+annotate("point", y = 52.39229, x = 13.51959, colour = "red")
+
+
+
+
+
+```
+
+## add exact original geolocations to dataset :
+```{r}
+## clean env
+rm(list = ls())
+
+## add original geolocations of bike:
+df <- NULL
+dt <- fread('BikeSharing/data/preprocessed.csv')
+df<- dt[, which(duplicated(names(dt))) := NULL]
+dt <- NULL
+
+# drop bikeproviderId ==2: which is 80% of all rows !!!
+df <- df %>% filter(!providerId==2)
+df <- df %>% select(id,latitude,longitude,next_lat,next_lon)
+
+
+df <- df %>% select(id, bike_exact_latitude=latitude, bike_exact_longitude = longitude,bike_exact_next_lat = next_lat, bike_exact_next_lon=next_lon)
+
+
+df.processed <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed.csv')
+
+df.merged <- merge(df.processed,df,by='id')
+
+fwrite(df.merged,'data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed_and_exact_geo.csv')
+
+
+```
+
+
+# add week.number / week OR weekend field and rounded hour :
+```{r}
+
+## clean env
+rm(list = ls())
+
+df <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed_and_exact_geo.csv')
+
+
+# convert to datetime format :
+df$timestamp <- ymd_hms(df$timestamp)
+df$end_timestamp <- ymd_hms(df$end_timestamp)
+
+df$week.number <- lubridate::week(df$timestamp)
+df$date_only <- lubridate::date(df$timestamp)
+
+
+df$week.day.label <- wday(df$timestamp, label = TRUE,locale = "C")
+df$week.day.number <- wday(df$timestamp, label = FALSE)
+df <- df %>% mutate(is.weekend = ifelse(week.day.number %in% c(1,7),TRUE,FALSE))
+
+df$hour_of_day <- hour(df$timestamp)
+df <- df %>% mutate(is.working.hour = ifelse(hour_of_day %in% seq(7,20) & !is.weekend,TRUE,FALSE))
+df$timestamp_rounded <- round_date(df$timestamp, unit = "hour",
+  week_start = getOption("lubridate.week.start", 7))
+
+fwrite(df,'data/bikes_preprocessed_cleaned.csv')
+```
+
+## (Optional) Add geodata (names & geocoordinates of centroids) of LOR/LOR districts with main dataset:
+```{r}
+## clean env
+rm(list = ls())
+
+df <- fread('data/bikes_preprocessed_cleaned.csv')
+
+# !!!! add leading zero to spatial_na's:
+#df$from_spatial_na <- str_pad(df$from_spatial_na, 8, pad = "0")
+
+df.lor <- fread('data/lor_geodata.csv') %>% select(-V1)
+df.lor.districts <- fread('data/lor_districts_geodata.csv')%>% select(-V1)
+
+
+df.lor.from <- df.lor
+df.lor.to <- df.lor
+
+df.lor.districts_from <- df.lor.districts
+df.lor.districts_to <- df.lor.districts
+
+colnames(df.lor.from)<- paste0('from_lor_',colnames(df.lor.from))
+colnames(df.lor.to)<- paste0('to_lor_',colnames(df.lor.to))
+
+colnames(df.lor.districts_from)<- paste0('from_lor_district_',colnames(df.lor.districts_from))
+colnames(df.lor.districts_to)<- paste0('to_lor_district_',colnames(df.lor.districts_to))
+
+
+df.merged <- merge(df,df.lor.from,by.x='from_spatial_na',by.y='from_lor_spatial_na')
+df.merged <- merge(df.merged,df.lor.to,by.x='to_spatial_na',by.y='to_lor_spatial_na')
+
+df.merged <- merge(df.merged,df.lor.districts_from,by.x='from_district_spatial_na',by.y='from_lor_district_spatial_na')
+df.merged <- merge(df.merged,df.lor.districts_to,by.x='to_district_spatial_na',by.y='to_lor_district_spatial_na')
+
+fwrite(df.merged,'data/bikes_preprocessed_with_districts_geodata.csv')
+```
+
