@@ -1,6 +1,8 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
@@ -9,90 +11,87 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 
 ```{r}
 
-
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(data.table, dplyr,lubridate,ggplot2,stringr)
 
 ```
 
 ```{r}
-df <- fread('data/bikes_preprocessed_with_LOR_and_districts_and_duration_and_distance_and_speed.csv')
-
-df <- df%>% filter(!providerId==2)
+df <- fread('data/bikes_preprocessed_cleaned.csv')
 
 df$timestamp <- ymd_hms(df$timestamp)
 df$end_timestamp <- ymd_hms(df$end_timestamp)
 
-df$week <- lubridate::week(df$timestamp)
-df$day <- lubridate::date(df$timestamp)
-df$week_provider <- str_c(df$week,df$providerId)
+df$date_only <- ymd(df$date_only)
+df$timestamp_rounded <- ymd_hms(df$timestamp_rounded)
+
+
 ```
 
 # plot distribution per provider per week
 ```{r}
-groupy.week.provider <- df %>% group_by(providerId,week) %>% summarise(trips=n())
+groupy.week.provider <- df %>% group_by(providerId,week.number) %>% summarise(trips=n())
 
-g <- ggplot(groupy.week.provider, aes(week,trips,color=as.factor(providerId)))
+g <- ggplot(groupy.week.provider, aes(week.number,trips,color=as.factor(providerId)))
 g + geom_line()
 ```
 ## plot trips per provider per day
 ```{r}
-groupy.date.provider <- df %>% group_by(providerId,day) %>% summarise(trips=n())
+groupy <- df %>% group_by(providerId,date_only,is.weekend,week.day.number) %>% summarise(trips=n()) %>% arrange(date_only)
 
-g <- ggplot(groupy.date.provider, aes(day,trips,color=as.factor(providerId)))
-g + geom_line()
+## Get the start and end points for highlighted regions
+
+start <- unique(groupy$date_only[groupy$is.weekend & groupy$week.day.number==7])
+end <- unique(groupy$date_only[groupy$is.weekend & groupy$week.day.number==1])
+if (length(start) > length(end)) end <- c(end, tail(groupy$date_only, 1))
+if (length(start) < length(end)) start <- c(start, head(groupy$date_only, 1))
+
+## highlight region data
+rects <- data.frame(start=start, end=end, group=seq_along(start))
+
+g <- ggplot(groupy, aes(date_only,trips,color=as.factor(providerId)))
+g + geom_line()+ geom_rect(data=rects, inherit.aes=FALSE, aes(xmin=start, xmax=end, ymin=0,
+                ymax=20000, group=group), color="transparent", fill="lightgreen", alpha=0.3)
 ```
 ## plot median speed per day per provider
 ```{r}
-groupy.date.provider.speed <- df %>% filter(speed>1 & mode=='trip') %>%group_by(providerId,day) %>% summarise(median_speed=median(speed))
+groupy <- df %>% filter(speed>1 & mode=='trip') %>%group_by(providerId,date_only,week.day.number,is.weekend) %>% summarise(median_speed=median(speed))
 
-g <- ggplot(groupy.date.provider.speed, aes(day,median_speed,color=as.factor(providerId)))
-g + geom_line()
+start <- unique(groupy$date_only[groupy$is.weekend & groupy$week.day.number==7])
+end <- unique(groupy$date_only[groupy$is.weekend & groupy$week.day.number==1])
+if (length(start) > length(end)) end <- c(end, tail(groupy$date_only, 1))
+if (length(start) < length(end)) start <- c(start, head(groupy$date_only, 1))
+
+## highlight region data
+rects <- data.frame(start=start, end=end, group=seq_along(start))
+
+g <- ggplot(groupy, aes(date_only,median_speed,color=as.factor(providerId)))
+g + geom_line()+ geom_rect(data=rects, inherit.aes=FALSE, aes(xmin=start, xmax=end, ymin=0,
+                ymax=max(groupy$median_speed), group=group), color="transparent", fill="lightgreen", alpha=0.3)
 ```
 ## plot median duration per day per provider
 ```{r}
-groupy.date.provider.duration <- df %>% filter(speed>1 & mode=='trip'& duration_minutes<50) %>%group_by(providerId,day) %>% summarise(median_duration=median(duration_minutes))
+groupy.date.provider.duration <- df %>% filter(speed>1 & mode=='trip'& duration_minutes<50) %>%group_by(providerId,week.day.number) %>% summarise(median_duration=median(duration_minutes))
 
-g <- ggplot(groupy.date.provider.duration, aes(day,median_duration,color=as.factor(providerId)))
+g <- ggplot(groupy.date.provider.duration, aes(week.day.number,median_duration,color=as.factor(providerId)))
 g + geom_line()
 ```
 
 ```{r}
-ggplot(df %>% filter(mode=='trip' & speed >1 & speed<30 & duration_minutes<60),aes(distance_direct/1000, fill=as.factor(providerId)))+ geom_histogram(bins = 300,alpha=.5)+ facet_wrap(.~week)
+ggplot(df %>% filter(mode=='trip' & distance_direct>50 &speed >1 & speed<30 & duration_minutes<60),aes(distance_direct/1000, fill=as.factor(providerId)))+ geom_histogram(bins = 300,alpha=.5)+ facet_wrap(.~week.number)
 ```
 
 
+## Sankey
 ```{r}
-# Load package
 library(networkD3)
- 
-# Load energy projection data
-URL <- "https://cdn.rawgit.com/christophergandrud/networkD3/master/JSONdata/energy.json"
-Energy <- jsonlite::fromJSON(URL)
-
- 
-# Now we have 2 data frames: a 'links' data frame with 3 columns (from, to, value), and a 'nodes' data frame that gives the name of each node.
-head( Energy$links )
-head( Energy$nodes )
-
-df.links<-Energy$links
-df.nodes <- Energy$nodes
- 
-# Thus we can plot it
-p <- sankeyNetwork(Links = Energy$links, Nodes = Energy$nodes, Source = "source",
-              Target = "target", Value = "value", NodeID = "name",
-              units = "TWh", fontSize = 12, nodeWidth = 30)
-p
-```
-```{r}
-
-groupy <- df %>% group_by(from_spatial_na,to_spatial_na) %>% summarise(total=n())
-
-
+groupy <- df %>% filter(mode=='trip' & distance_direct>100) %>% group_by(from_spatial_na,to_spatial_na) %>% summarise(total=n())
+groupy$from_spatial_na<-paste0('start_',groupy$from_spatial_na)
+groupy$to_spatial_na<-paste0('end_',groupy$to_spatial_na)
 
 groupy <- groupy %>% ungroup() %>% select(source=from_spatial_na,target=to_spatial_na,value=total)%>% as.data.frame(.) 
 
-groupy <- groupy  %>% filter(!source==target) %>% filter(value>400)
+groupy <- groupy  %>% filter(!source==target) %>% filter(value>500)
 
 df.source <- groupy$source %>% as.data.frame()
 df.target <- groupy$target %>% as.data.frame()
@@ -116,10 +115,8 @@ colnames(nodes) <- c('name')
 nodes$name <- as.character(nodes$name)
 nodes <- as.data.frame(nodes)
 
-
- 
-
 # Now we have 2 data frames: a 'links' data frame with 3 columns (from, to, value), and a 'nodes' data frame that gives the name of each node.
+
 
  
 # Thus we can plot it
@@ -127,6 +124,11 @@ p <- sankeyNetwork(Links = groupy, Nodes = nodes, Source = "source",
               Target = "target", Value = "value", NodeID = "name",
               units = "TWh", fontSize = 12, nodeWidth = 10)
 p
+#saveNetwork(p,'sankey.html',selfcontained = TRUE)
+
+```
+
+```{r}
 
 ```
 
