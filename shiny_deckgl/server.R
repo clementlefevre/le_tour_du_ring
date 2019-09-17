@@ -169,5 +169,68 @@ shinyServer(function(input, output) {
       m.start
       
     })
+    
+    output$sankey <- renderPlotly({
+      # create an index :
+      groupy <- df.sankey %>% filter(from_name==input$sankey.from)
+      
+      groupy$from_spatial_na<-paste0('start_',groupy$from_district_spatial_na,'_',groupy$from_name)
+      groupy$to_spatial_na<-paste0('end_',groupy$to_district_spatial_na,'_',groupy$to_name)
+      
+      
+      
+      from <- unique(groupy$from_spatial_na)
+      to <- unique(groupy$to_spatial_na)
+      
+      
+      df.indexes <-c(from,to) %>% as.data.frame()
+      df.indexes$index <- rownames(df.indexes) 
+      df.indexes <- as.data.frame(df.indexes)
+      colnames(df.indexes)<- c('name','index')
+      df.indexes$index <- as.numeric(df.indexes$index)-1
+      
+      
+      groupy <- merge(groupy,df.indexes,by.x='from_spatial_na',by.y='name')
+      groupy <- merge(groupy,df.indexes,by.x='to_spatial_na',by.y='name')
+      
+      groupy <- groupy %>% arrange(total)
+      
+      groupy <- groupy %>% select(source=index.x,target=index.y,value=total)# %>% filter(target>0)
+      
+      nodes <-  df.indexes %>% select(name)
+      colnames(nodes) <- c('name')
+      nodes$name <- as.character(nodes$name)
+      nodes <- as.data.frame(nodes)
+      
+      
+      p <- plot_ly(
+        type = "sankey",
+        orientation = "h",
+        
+        node = list(
+          label = nodes%>% pull(),
+          #color = c("blue", "blue", "blue", "blue", "blue", "blue"),
+          pad = 15,
+          thickness = 20,
+          line = list(
+            color = "black",
+            width = 0.5
+          )
+        ),
+        
+        link = list(
+          source = groupy %>% pull(source),
+          target = groupy %>% pull(target),
+          value =  groupy %>% pull(value)
+        )
+      ) %>% 
+        layout(
+          title = "Bikes destinations (total trips March 27th to July 17th)",
+          font = list(
+            size = 10
+          )
+        )
+      p
+    })
    
 })

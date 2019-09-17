@@ -9,6 +9,7 @@
 
 library(shiny)
 library(deckgl)
+library(plotly)
 
 anim.options <- animationOptions(interval = 2000, loop = TRUE, playButton = NULL,
                                  pauseButton = NULL)
@@ -64,7 +65,14 @@ shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
                     step = 60*10*2,
                     animate = anim.options
                 ),leafletOutput("map.locations") 
-                ))
+                ),
+                tabPanel("Sankey", selectInput(
+                    "sankey.from",
+                    "From :",
+                    choices = list.sankey.districts
+                ),plotlyOutput("sankey") 
+                )
+                )
                 
    
         ,

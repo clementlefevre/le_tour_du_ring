@@ -44,3 +44,7 @@ df.locations.nearest.hour <- df.locations.nearest.hour %>% filter(mode=='accessi
 df.bvg <- read.csv('data/bvg_stations.csv') %>% filter(!is.na(lat))
 
 
+# load data for sankey
+df.sankey <- fread('data/sankey_data.csv')
+list.sankey.districts <-sort( unique(df.sankey$from_name))
+
