@@ -12,7 +12,7 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 ```{r}
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(data.table, dplyr,lubridate,ggplot2,stringr)
+pacman::p_load(data.table, dplyr,lubridate,ggplot2,stringr,plotly)
 
 ```
 
@@ -85,13 +85,31 @@ ggplot(df %>% filter(mode=='trip' & distance_direct>50 &speed >1 & speed<30 & du
 ## Sankey
 ```{r}
 library(networkD3)
-groupy <- df %>% filter(mode=='trip' & distance_direct>100) %>% group_by(from_spatial_na,to_spatial_na) %>% summarise(total=n())
-groupy$from_spatial_na<-paste0('start_',groupy$from_spatial_na)
-groupy$to_spatial_na<-paste0('end_',groupy$to_spatial_na)
 
-groupy <- groupy %>% ungroup() %>% select(source=from_spatial_na,target=to_spatial_na,value=total)%>% as.data.frame(.) 
+df <- fread('data/bikes_preprocessed_cleaned.csv')
+df.lor <- fread('data/lor_geodata.csv') %>% select(spatial_na,spatial_al)
 
-groupy <- groupy  %>% filter(!source==target) %>% filter(value>500)
+
+# get top 20 origins :
+top.origins <-  df %>% filter(mode=='trip' & hour_of_day!=4) %>% group_by(from_spatial_na) %>% summarise(total=n()) %>% top_n(20,total) %>% pull(from_spatial_na)
+
+df <- df %>% filter(from_spatial_na %in% top.origins)
+
+groupy <- df %>% filter(mode=='trip' & hour_of_day!=4) %>% group_by(from_spatial_na,to_spatial_na) %>% summarise(total=n())
+
+groupy <- merge(groupy,df.lor,by.x='from_spatial_na',by.y='spatial_na',suffixes = c('','_from'))
+groupy <- merge(groupy,df.lor,by.x='to_spatial_na',by.y='spatial_na',suffixes = c('','_to'))
+
+groupy$from_spatial_na<-paste0('start_',groupy$from_spatial_na,'_',groupy$spatial_al)
+groupy$to_spatial_na<-paste0('end_',groupy$to_spatial_na,'_',groupy$spatial_al_to)
+
+groupy <- groupy %>% ungroup() %>% select(source=from_spatial_na,target=to_spatial_na,value=total)%>% as.data.frame(.)
+
+
+# plot top origin flows
+ggplot(groupy ,aes(reorder(source,-value),value))+ geom_bar(stat='identity')+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+groupy <- groupy  %>% filter(source=='start_1011102_Groer Tiergarten')#%>% filter(value>1000)
 
 df.source <- groupy$source %>% as.data.frame()
 df.target <- groupy$target %>% as.data.frame()
@@ -108,9 +126,7 @@ groupy <- merge(groupy,df.indexes,by.x='target',by.y='spatial_na')
 
 groupy <- groupy %>% select(source=id.x,target=id.y,value=value)# %>% filter(target>0)
 
-
-
-nodes <-df.indexes %>% select(spatial_na)
+nodes <-  df.indexes %>% select(spatial_na)
 colnames(nodes) <- c('name')
 nodes$name <- as.character(nodes$name)
 nodes <- as.data.frame(nodes)
@@ -122,7 +138,7 @@ nodes <- as.data.frame(nodes)
 # Thus we can plot it
 p <- sankeyNetwork(Links = groupy, Nodes = nodes, Source = "source",
               Target = "target", Value = "value", NodeID = "name",
-              units = "TWh", fontSize = 12, nodeWidth = 10)
+              units = "Bikes", fontSize = 12, nodeWidth = 10)
 p
 #saveNetwork(p,'sankey.html',selfcontained = TRUE)
 

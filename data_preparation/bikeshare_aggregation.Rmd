@@ -197,6 +197,11 @@ groupy.lor.per_date_only <- df %>% group_by(from_spatial_na,date_only,time_inter
 groupy.lor.overall <- groupy.lor.per_date_only %>% group_by(from_spatial_na,time_interval,is.weekend) %>% summarise(median_counts=median(total_counts),median_duration=median(median_duration))
 
 
+# add LOR Names
+# load geo data from LOR districts
+df.lor <- fread('../data/lor_geodata.csv') %>% select(spatial_na,PLRNAME)
+
+groupy.lor.overall<- merge(groupy.lor.overall,df.lor,by.x='from_spatial_na',by.y='spatial_na')
 
 fwrite(groupy.lor.overall,'../data/accessible_lor_hour_weekend_aggregated.csv')
 df<-NULL

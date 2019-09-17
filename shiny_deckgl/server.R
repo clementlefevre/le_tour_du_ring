@@ -48,14 +48,17 @@ properties.flows <- list(
 properties.availability <- list(
   filled = TRUE,
   extruded = TRUE,
-  getRadius = 100,
-  lineWidthScale = 20,
+  getRadius = 10,
+  lineWidthScale = 2,
   lineWidthMinPixels = 2,
-  getLineWidth = 10,
-  getLineColor = c(255,255,255,255),#get_color_to_rgb_array("'red'"),
-  getFillColor = c(160, 160, 180, 200),
+  getLineWidth = 1,
+  getLineColor = c(100,255,255,255),
+  getFillColor =  c(128,0,0,255),
+  #getFillColor = JS("data => [data.properties.median_duration/100,0,0]"),
   getElevation =  JS("data => data.properties.median_counts_10"),
-  elevationScale = 10
+  #getTooltip = JS("object => `Median Duration (mn): ${object.properties.median_duration}<br/>Median bikes available : ${object.properties.median_counts} ${object.properties.PLRNAME}`"),
+  getTooltip = JS("object => `${object.properties.name}<br/>Median bikes available : ${object.properties.median_counts}}<br/>Median Availability (mn): ${object.properties.median_duration}`"),
+  elevationScale = 3
 )
 
 
@@ -149,7 +152,7 @@ shinyServer(function(input, output) {
       })
     
     
-    pal <- colorFactor(c("navy", "red"), domain = c("accessible", "trip"))
+    pal <- colorFactor(c("navy"), domain = c("accessible"))
     observe({
     
       m.start <-

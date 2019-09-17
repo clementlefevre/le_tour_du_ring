@@ -29,6 +29,7 @@ df.accessible$from_spatial_na <- str_pad(df.accessible$from_spatial_na,width=8,p
 
 df.accessible$median_duration <- round(df.accessible$median_duration,0)
 df.accessible$median_counts_10 <- df.accessible$median_counts*100
+df.accessible$name <- (df.accessible$PLRNAME)
 
 nc_geojson <- NULL
 
@@ -37,5 +38,6 @@ nc_geojson <- NULL
 #df.locations.rounded <- fread('../data/bikes_locations_rounded_test.csv')
 df.locations.nearest.hour <- fread('data/bikes_nearest_10_minutes.csv')
 df.locations.nearest.hour$timestamp <- ymd_hms(df.locations.nearest.hour$timestamp)
+df.locations.nearest.hour <- df.locations.nearest.hour %>% filter(mode=='accessible')
 
 

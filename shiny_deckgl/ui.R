@@ -8,9 +8,7 @@
 #
 
 library(shiny)
-
 library(deckgl)
-
 
 anim.options <- animationOptions(interval = 2000, loop = TRUE, playButton = NULL,
                                  pauseButton = NULL)
@@ -63,7 +61,7 @@ shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
                     min(df.locations.nearest.hour$timestamp),
                     max(df.locations.nearest.hour$timestamp),
                     value =min(df.locations.nearest.hour$timestamp),
-                    step = 1,
+                    step = 60*10,
                     animate = anim.options
                 ),leafletOutput("map.locations") 
                 ))
