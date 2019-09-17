@@ -40,4 +40,7 @@ df.locations.nearest.hour <- fread('data/bikes_nearest_10_minutes.csv')
 df.locations.nearest.hour$timestamp <- ymd_hms(df.locations.nearest.hour$timestamp)
 df.locations.nearest.hour <- df.locations.nearest.hour %>% filter(mode=='accessible')
 
+# load BVG stations
+df.bvg <- read.csv('data/bvg_stations.csv') %>% filter(!is.na(lat))
+
 

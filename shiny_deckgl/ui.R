@@ -57,11 +57,11 @@ shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
                 ),
                 tabPanel("Anim", sliderInput(
                     "time",
-                    "date",
+                    "Bikes available on Wednesday 3rd July 2019",
                     min(df.locations.nearest.hour$timestamp),
                     max(df.locations.nearest.hour$timestamp),
-                    value =min(df.locations.nearest.hour$timestamp),
-                    step = 60*10,
+                    value =as.POSIXct('2019-07-03 6:00:00'),
+                    step = 60*10*2,
                     animate = anim.options
                 ),leafletOutput("map.locations") 
                 ))

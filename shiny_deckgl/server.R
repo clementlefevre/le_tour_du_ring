@@ -53,11 +53,11 @@ properties.availability <- list(
   lineWidthMinPixels = 2,
   getLineWidth = 1,
   getLineColor = c(100,255,255,255),
-  getFillColor =  c(128,0,0,255),
-  #getFillColor = JS("data => [data.properties.median_duration/100,0,0]"),
+  #getFillColor =  c(128,0,0,255),
+  getFillColor = JS("data => [data.properties.median_duration,0,0]"),
   getElevation =  JS("data => data.properties.median_counts_10"),
   #getTooltip = JS("object => `Median Duration (mn): ${object.properties.median_duration}<br/>Median bikes available : ${object.properties.median_counts} ${object.properties.PLRNAME}`"),
-  getTooltip = JS("object => `${object.properties.name}<br/>Median bikes available : ${object.properties.median_counts}}<br/>Median Availability (mn): ${object.properties.median_duration}`"),
+  getTooltip = JS("object => `${object.properties.name}<br/>Median bikes available : ${object.properties.median_counts}<br/>Median Availability (mn): ${object.properties.median_duration}`"),
   elevationScale = 3
 )
 
@@ -146,20 +146,26 @@ shinyServer(function(input, output) {
     output$map.locations <- renderLeaflet( {
       
       m <-  leaflet(df.locations.nearest.hour) %>%  setView(13.3666652,52.5166646, zoom = 12) %>%
-        addProviderTiles(providers$CartoDB.Positron) 
+        addProviderTiles(providers$CartoDB.Positron)  %>%
+        
+        addLegend(colors = c("palevioletred", "gold"), labels = c("Bikes available", "BVG station"))
+    
         
       m
       })
     
     
-    pal <- colorFactor(c("navy"), domain = c("accessible"))
+    pal <- colorFactor(c("palevioletred"), domain = c("accessible"))
     observe({
     
       m.start <-
         leafletProxy("map.locations", data = df.locations.nearest.hour %>% filter(timestamp==input$time)) %>%
-        clearMarkers()       %>%
+        clearMarkers()      %>% 
         addCircleMarkers(
-          lng = ~rounded.lon, lat = ~rounded.lat, radius = ~total,stroke = FALSE, fillOpacity = 0.5,color = ~pal(mode))
+          lng = ~rounded.lon, lat = ~rounded.lat, radius = ~total,stroke = FALSE, fillOpacity = 1,color = ~pal(mode))  %>%
+    
+        addCircleMarkers(data=df.bvg,
+          lng = ~lon, lat = ~lat, radius =2,stroke = TRUE, color = "black",fillOpacity = 1,fillColor = 'gold',weight = 1,label=~name) 
       m.start
       
     })
