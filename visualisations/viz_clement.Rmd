@@ -1,0 +1,150 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2,ggthemes,scales)
+```
+
+
+# plot the number of trips per hour:
+
+```{r}
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip')
+
+df$timestamp_rounded <- ymd_hms(df$timestamp_rounded)
+
+groupy.per.hour <- df %>% group_by(timestamp_rounded) %>% summarise(total_trips = n())
+
+
+
+cols <- c('FALSE' = "red", 'TRUE'= "blue")
+
+groupy.per.hour$hour_of_day <- hour(groupy.per.hour$timestamp_rounded)
+p <-ggplot(groupy.per.hour,aes(timestamp_rounded,total_trips))+ geom_point(size=.5                        ,aes(color=factor(hour_of_day==4)))+ ylab('number of trips per hour')+xlab('')+ scale_colour_manual(values = cols)+ylim(0,2000)+labs(color='is 4 AM')+  theme_fivethirtyeight()+ggtitle('Total trips per hour')
+p
+ggsave('pictures/trips_per_hour.png',p)
+
+```
+
+
+# plot the average trip durations and distance :
+```{r}
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip' & hour_of_day!=4)
+
+df$timestamp_rounded <- ymd_hms(df$timestamp_rounded)
+
+groupy.per.hour <- df %>% group_by(timestamp_rounded) %>% summarise(median_duration =median(duration_minutes),median_speed = median(speed))
+
+groupy.per.hour$hour_of_day <- hour(groupy.per.hour$timestamp_rounded)
+ggplot(groupy.per.hour,aes(timestamp_rounded,median_duration))+ geom_jitter(alpha=.3,size=.5                        ,aes(color='red'))+ ylab('minutes')+xlab('')+ylim(0,60)+ggtitle('Median duration of trips per hour')
+
+
+
+df <-df  %>% filter(!hour_of_day==4 & duration_minutes<60*4)
+df$duration_interval <- cut(df$duration_minutes, breaks=c(0,5,10,20,40,2000), include.lowest=TRUE,labels = c("until 5 mins", "6 to 10 mins",'11 to 20 mins','21 to 40 mins','more than 40 mins'))
+
+groupy.duration_interval <-  df %>% group_by(duration_interval) %>% summarise(trips=n())
+
+p<- ggplot(   groupy.duration_interval                  ,aes(duration_interval,trips,fill='red')) + geom_bar(stat='identity')+theme_fivethirtyeight()+ ggtitle('Trips per duration') +theme(legend.position="none")+scale_y_continuous(labels = comma)
+
+p
+ggsave('pictures/trips_per_duration.png',p)
+```
+
+# plot the distance distribution :
+```{r}
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip' & hour_of_day!=4 & distance_direct<25000)
+df$distance_interval <- cut(df$distance_direct, breaks=c(0,200,500,1000,2000,4000,10000,200000), include.lowest=TRUE,labels = c("<200m", "200-500m",'500m-1km','1km-2km','2km-4km','4km-10km','>10km'))
+
+
+groupy.distance_interval <-  df %>% group_by(distance_interval) %>% summarise(trips=n())
+
+p<-ggplot(   groupy.distance_interval                  ,aes(distance_interval,trips,fill='lightred')) + geom_bar(stat='identity')+theme_fivethirtyeight()+ ggtitle('Trips per distance') +theme(legend.position="none")+scale_y_continuous(labels = comma)
+
+p
+ggsave('pictures/trips_per_distance.png',p)
+
+```
+## top starting points : SANKEY
+
+
+```{r}
+library(plotly)
+
+
+df <- fread('../data/bikes_preprocessed_cleaned.csv')
+df.lor <- fread('../data/lor_districts_geodata.csv') %>% select(spatial_na,spatial_al)
+
+
+# get top 20 origins :
+top.origins <-  df %>% filter(mode=='trip' & hour_of_day!=4) %>% group_by(from_district_spatial_na) %>% summarise(total=n()) %>% top_n(20,total) %>% pull(from_district_spatial_na)
+
+df <- df %>% filter(from_district_spatial_na %in% top.origins) %>% filter(from_district_spatial_na<120)
+
+groupy <- df %>% filter(mode=='trip' & hour_of_day!=4) %>% group_by(from_district_spatial_na,to_district_spatial_na) %>% summarise(total=n())
+
+# create an index :
+
+
+groupy$from_spatial_na<-paste0('start_',groupy$from_district_spatial_na,'_',groupy$spatial_al)
+groupy$to_spatial_na<-paste0('end_',groupy$to_district_spatial_na,'_',groupy$spatial_al_to)
+
+from <- unique(groupy$from_spatial_na)
+to <- unique(groupy$to_spatial_na)
+
+
+df.indexes <-c(from,to) %>% as.data.frame()
+df.indexes$index <- rownames(df.indexes) 
+df.indexes <- as.data.frame(df.indexes)
+colnames(df.indexes)<- c('name','index')
+df.indexes$index <- as.numeric(df.indexes$index)-1
+
+
+groupy <- merge(groupy,df.indexes,by.x='from_spatial_na',by.y='name')
+groupy <- merge(groupy,df.indexes,by.x='to_spatial_na',by.y='name')
+
+groupy <- groupy %>% select(source=index.x,target=index.y,value=total)# %>% filter(target>0)
+
+nodes <-  df.indexes %>% select(name)
+colnames(nodes) <- c('name')
+nodes$name <- as.character(nodes$name)
+nodes <- as.data.frame(nodes)
+
+
+p <- plot_ly(
+  type = "sankey",
+  orientation = "h",
+  
+  node = list(
+    label = nodes%>% pull(),
+    #color = c("blue", "blue", "blue", "blue", "blue", "blue"),
+    pad = 15,
+    thickness = 20,
+    line = list(
+      color = "black",
+      width = 0.5
+    )
+  ),
+  
+  link = list(
+    source = groupy %>% pull(source),
+    target = groupy %>% pull(target),
+    value =  groupy %>% pull(value)
+  )
+) %>% 
+  layout(
+    title = "Basic Sankey Diagram",
+    font = list(
+      size = 10
+    )
+  )
+p
+```
+
+
+

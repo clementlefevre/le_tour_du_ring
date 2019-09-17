@@ -153,6 +153,37 @@ fwrite(merged,'../data/trips_districts_hour_weekend_aggregated.csv')
 ```
 
 
+# aggregate trips per LOR and hour of day 
+```{r}
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip' & hour_of_day!=4) 
+
+
+df$time_interval <- cut(df$hour_of_day, breaks=c(0,6,12,18,23), include.lowest=TRUE,labels = c("Night", "Morning",'Noon','Evening'))
+
+groupy.per_date_only <- df %>% group_by(from_spatial_na,to_spatial_na,mode,date_only,time_interval,is.weekend) %>% summarise(total_counts=n())
+
+
+groupy.per_time_interval <- groupy.per_date_only %>% ungroup() %>% group_by(from_spatial_na,to_spatial_na,mode,time_interval,is.weekend) %>% summarise(median_trips_count=median(total_counts),total_trips_count = sum(total_counts))
+
+df<-NULL
+
+# load geo data from LOR districts
+df.lor <- fread('../data/lor_geodata.csv') %>% select(-V1,-spatial_al)
+
+df.lor.from <- df.lor
+colnames(df.lor.from)<- paste0('from_',colnames(df.lor.from))
+
+df.lor.to <- df.lor
+colnames(df.lor.to)<- paste0('to_',colnames(df.lor.to))
+
+#add from LOR & dictrict Names and Centroids :
+merged <- merge(groupy.per_time_interval,df.lor.from,by.x='from_spatial_na',by.y='from_spatial_na')
+merged <- merge(merged,df.lor.to,by.x='to_spatial_na',by.y='to_spatial_na')
+
+
+fwrite(merged,'../data/trips_lor_hour_weekend_aggregated.csv')
+```
+
 ## aggregate per accessibilite duration and count  per lor/district:
 
 ```{r}
