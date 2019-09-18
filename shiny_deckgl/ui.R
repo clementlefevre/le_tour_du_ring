@@ -10,16 +10,19 @@
 library(shiny)
 library(deckgl)
 library(plotly)
+library(shinythemes)
 
 anim.options <- animationOptions(interval = 2000, loop = TRUE, playButton = NULL,
                                  pauseButton = NULL)
 
 # Define UI for application that draws a histogram
-shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
-    h3("sharing is biking"),
+shinyUI(fluidPage(theme = shinytheme("cyborg"),
+                
+    h4("Berlin Bikesharing flows"),
+
     
     tabsetPanel(type = "tabs",
-                tabPanel("Deckgl",   
+                tabPanel("Trips & Vacancy",   
                          selectInput("maptype", "Show :",
                                      choices =   c("Flows" = 'flows',
                                                    "Availability" = 'availability'))
@@ -28,27 +31,32 @@ shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
                          fluidRow(
                         
                             
-                             column(3, radioButtons(
+                             column(2, radioButtons(
                              "direction", "direction",
-                             c("FROM" = TRUE,
-                               "TO" = FALSE)
+                             
+                             choiceNames = list(
+                                 HTML("<font color='green'>From</font>"), 
+                                 HTML("<font color='red'>To</font>")
+                             ),
+                             choiceValues = c(TRUE,FALSE)
+                        
                          )),
                              column(
-                                 3,
-                                 selectInput("ortsteil.from", "FROM :",
+                                 2, textOutput("direction.1"),
+                                 selectInput("ortsteil.from", "",
                                              choices = from.districts)
                              ),
                          column(
-                             3,
-                             selectInput("ortsteil.to", "TO :",
+                             2, textOutput("direction.2"),
+                             selectInput("ortsteil.to", "",
                                          choices = to.districts)
                          ),
                              column(
-                                 3,
+                                 2,
                                  selectInput("hour_filter", "Hour of day :",
                                              choices = hour_filter)
                              ),
-                             column(3, radioButtons(
+                             column(2, radioButtons(
                                  "is.weekend", "is week end :",
                                  c("YES" = TRUE,
                                    "NO" = FALSE)
@@ -56,9 +64,9 @@ shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
                           
                          ),        deckglOutput("flows")
                 ),
-                tabPanel("Anim", sliderInput(
+                tabPanel("Bikes & BVG",h5("Bikes available on Wednesday 3rd July 2019") ,sliderInput(
                     "time",
-                    "Bikes available on Wednesday 3rd July 2019",
+                    "Press play button to start the animation",
                     min(df.locations.nearest.hour$timestamp),
                     max(df.locations.nearest.hour$timestamp),
                     value =as.POSIXct('2019-07-03 6:00:00'),
@@ -66,7 +74,7 @@ shinyUI(fluidPage(tags$style("#hour_filter {background-color:blue;}"),
                     animate = anim.options
                 ),leafletOutput("map.locations") 
                 ),
-                tabPanel("Sankey", selectInput(
+                tabPanel("District Flow", selectInput(
                     "sankey.from",
                     "From :",
                     choices = list.sankey.districts

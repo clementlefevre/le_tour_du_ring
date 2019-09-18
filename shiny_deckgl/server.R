@@ -71,7 +71,7 @@ shinyServer(function(input, output) {
             add_arc_layer(
                 data = df,
                 properties = properties.flows
-            ) %>% add_mapbox_basemap(token=MAPBOX_API_TOKEN)
+            ) %>% add_mapbox_basemap(token=MAPBOX_API_TOKEN, style = "mapbox://styles/mapbox/dark-v9")
     })
     
      output$deck.availability <- renderDeckgl({
@@ -146,16 +146,16 @@ shinyServer(function(input, output) {
     output$map.locations <- renderLeaflet( {
       
       m <-  leaflet(df.locations.nearest.hour) %>%  setView(13.3666652,52.5166646, zoom = 12) %>%
-        addProviderTiles(providers$CartoDB.Positron)  %>%
+        addProviderTiles(providers$CartoDB.DarkMatter)  %>%
         
-        addLegend(colors = c("palevioletred", "gold"), labels = c("Bikes available", "BVG station"))
+        addLegend(colors = c("red", "gold"), labels = c("Bikes available", "BVG S+U/Tram"))
     
         
       m
       })
     
     
-    pal <- colorFactor(c("palevioletred"), domain = c("accessible"))
+    pal <- colorFactor(c("red"), domain = c("accessible"))
     observe({
     
       m.start <-
@@ -209,7 +209,7 @@ shinyServer(function(input, output) {
         
         node = list(
           label = nodes%>% pull(),
-          #color = c("blue", "blue", "blue", "blue", "blue", "blue"),
+          color = 'lightcoral',
           pad = 15,
           thickness = 20,
           line = list(
@@ -231,6 +231,24 @@ shinyServer(function(input, output) {
           )
         )
       p
+    })
+    
+    output$direction.1 <- renderText({
+      if(input$direction==TRUE){
+        'FROM'
+      }else{
+        'TO'
+      }
+      
+    })
+    
+    output$direction.2 <- renderText({
+      if(input$direction==TRUE){
+        'TO'
+      }else{
+        'FROM'
+      }
+      
     })
    
 })

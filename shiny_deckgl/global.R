@@ -41,7 +41,7 @@ df.locations.nearest.hour$timestamp <- ymd_hms(df.locations.nearest.hour$timesta
 df.locations.nearest.hour <- df.locations.nearest.hour %>% filter(mode=='accessible')
 
 # load BVG stations
-df.bvg <- read.csv('data/bvg_stations.csv') %>% filter(!is.na(lat))
+df.bvg <- read.csv('data/bvg_ubahn_sbahn_tram.csv') %>% filter(!is.na(lat))
 
 
 # load data for sankey

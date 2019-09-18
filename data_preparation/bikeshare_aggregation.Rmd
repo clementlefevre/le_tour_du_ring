@@ -204,6 +204,74 @@ df.lor <- fread('../data/lor_geodata.csv') %>% select(spatial_na,PLRNAME)
 groupy.lor.overall<- merge(groupy.lor.overall,df.lor,by.x='from_spatial_na',by.y='spatial_na')
 
 fwrite(groupy.lor.overall,'../data/accessible_lor_hour_weekend_aggregated.csv')
+
 df<-NULL
 ```
+ 
+ ## aggregate per total trips per districts and compute the net migrations
+```{r}
+df <- fread('../data/bikes_preprocessed_cleaned.csv') %>% filter(mode=='trip' & hour_of_day!=4  & between(hour_of_day,6,23))
 
+
+df.top.districts <- df %>% group_by(from_district_spatial_na)%>% summarise(trips=n()) %>% top_n(15,trips) 
+
+top.districts <- df.top.districts %>% pull(from_district_spatial_na)
+
+df$time_interval <- cut(df$hour_of_day, breaks=c(6,12,18,23), include.lowest=TRUE,labels = c("Morning", 'Noon','Evening'))
+
+
+# overall balance
+groupy.from <- df  %>% group_by(from_district_spatial_na) %>% summarise(trips=n())
+
+groupy.from$direction <- "from"
+colnames(groupy.from)<-c('spatial_na','trips','direction')
+
+groupy.from <- groupy.from %>%filter(spatial_na %in%  top.districts)
+
+groupy.to <- df %>% group_by(to_district_spatial_na) %>% summarise(trips=n())
+
+groupy.to$direction <- "to"
+colnames(groupy.to)<-c('spatial_na','trips','direction')
+
+groupy.to <- groupy.to %>%filter(spatial_na %in%  top.districts)
+
+groupy.net.balance <- merge(groupy.from,groupy.to,by='spatial_na')
+groupy.net.balance$balance <- groupy.net.balance$trips.y-groupy.net.balance$trips.x
+
+groupy.from.to <- rbind(groupy.from,groupy.to)
+
+groupy.from.to <- groupy.from.to%>% filter(spatial_na %in% top.districts)
+
+write.csv(groupy.net.balance,'../data/balance_trips_overall.csv')
+
+write.csv(groupy.from.to,'../data/ditricts_from_to_trips_overall.csv')
+# per time interval
+
+groupy.from.time_interval <- df  %>% group_by(time_interval,from_district_spatial_na) %>% summarise(trips=n())
+
+groupy.from.time_interval$direction <- "from"
+colnames(groupy.from.time_interval)<-c('time_interval','spatial_na','trips','direction')
+
+groupy.from.time_interval <- groupy.from.time_interval %>%filter(spatial_na %in%  top.districts)
+
+groupy.to.time_interval <- df %>% group_by(time_interval,to_district_spatial_na) %>% summarise(trips=n())
+
+groupy.to.time_interval$direction <- "to"
+colnames(groupy.to.time_interval)<-c('time_interval','spatial_na','trips','direction')
+
+groupy.to.time_interval <- groupy.to.time_interval %>%filter(spatial_na %in%  top.districts)
+
+groupy.net.balance.time_interval <- merge(groupy.from.time_interval,groupy.to.time_interval,by=c('spatial_na','time_interval'))
+
+groupy.net.balance.time_interval$balance <- groupy.net.balance.time_interval$trips.y-groupy.net.balance.time_interval$trips.x
+
+groupy.from.to.time_interval <- rbind(groupy.from.time_interval,groupy.to.time_interval)
+
+groupy.from.to.time_interval <- groupy.from.to.time_interval%>% filter(spatial_na %in% top.districts)
+
+write.csv(groupy.net.balance.time_interval,'../data/balance_trips_time_interval.csv')
+
+write.csv(groupy.from.to.time_interval,'../data/ditricts_from_to_trips_time_interval.csv')
+
+```
+ 

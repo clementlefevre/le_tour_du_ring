@@ -7,7 +7,7 @@ output: html_notebook
 
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2,ggthemes,scales)
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2,ggthemes,scales,forcats)
 ```
 
 
@@ -27,7 +27,7 @@ cols <- c('FALSE' = "red", 'TRUE'= "blue")
 groupy.per.hour$hour_of_day <- hour(groupy.per.hour$timestamp_rounded)
 p <-ggplot(groupy.per.hour,aes(timestamp_rounded,total_trips))+ geom_point(size=.5                        ,aes(color=factor(hour_of_day==4)))+ ylab('number of trips per hour')+xlab('')+ scale_colour_manual(values = cols)+ylim(0,2000)+labs(color='is 4 AM')+  theme_fivethirtyeight()+ggtitle('Total trips per hour')
 p
-ggsave('pictures/trips_per_hour.png',p)
+ggsave('pictures/trips_per_hour.png',p,dpi = 300)
 
 ```
 
@@ -53,7 +53,7 @@ groupy.duration_interval <-  df %>% group_by(duration_interval) %>% summarise(tr
 p<- ggplot(   groupy.duration_interval                  ,aes(duration_interval,trips,fill='red')) + geom_bar(stat='identity')+theme_fivethirtyeight()+ ggtitle('Trips per duration') +theme(legend.position="none")+scale_y_continuous(labels = comma)
 
 p
-ggsave('pictures/trips_per_duration.png',p)
+ggsave('pictures/trips_per_duration.png',p,dpi = 300)
 ```
 
 # plot the distance distribution :
@@ -67,7 +67,7 @@ groupy.distance_interval <-  df %>% group_by(distance_interval) %>% summarise(tr
 p<-ggplot(   groupy.distance_interval                  ,aes(distance_interval,trips,fill='lightred')) + geom_bar(stat='identity')+theme_fivethirtyeight()+ ggtitle('Trips per distance') +theme(legend.position="none")+scale_y_continuous(labels = comma)
 
 p
-ggsave('pictures/trips_per_distance.png',p)
+ggsave('pictures/trips_per_distance.png',p,dpi = 300)
 
 ```
 ## top starting points : SANKEY
@@ -78,21 +78,29 @@ library(plotly)
 
 
 df <- fread('../data/bikes_preprocessed_cleaned.csv')
+
+df <- df %>% filter(mode=='trip' & hour_of_day!=4) 
 df.lor <- fread('../data/lor_districts_geodata.csv') %>% select(spatial_na,spatial_al)
 
+list.sankey.districts <- unique(df$from_district_spatial_na)
 
-# get top 20 origins :
-top.origins <-  df %>% filter(mode=='trip' & hour_of_day!=4) %>% group_by(from_district_spatial_na) %>% summarise(total=n()) %>% top_n(20,total) %>% pull(from_district_spatial_na)
 
-df <- df %>% filter(from_district_spatial_na %in% top.origins) %>% filter(from_district_spatial_na<120)
 
-groupy <- df %>% filter(mode=='trip' & hour_of_day!=4) %>% group_by(from_district_spatial_na,to_district_spatial_na) %>% summarise(total=n())
+groupy <- df %>% group_by(from_district_spatial_na,to_district_spatial_na) %>% summarise(total=n())
+
+groupy <- merge(groupy,df.lor,by.x='from_district_spatial_na',by.y='spatial_na')
+groupy <- merge(groupy,df.lor,by.x='to_district_spatial_na',by.y='spatial_na')
+
+colnames(groupy)<- c("to_district_spatial_na","from_district_spatial_na","total","from_name","to_name")
+write.csv(groupy,'../data/sankey_data.csv')
 
 # create an index :
+groupy <- groupy %>% filter(from_district_spatial_na==301)
+
+groupy$from_spatial_na<-paste0('start_',groupy$from_district_spatial_na,'_',groupy$from_name)
+groupy$to_spatial_na<-paste0('end_',groupy$to_district_spatial_na,'_',groupy$to_name)
 
 
-groupy$from_spatial_na<-paste0('start_',groupy$from_district_spatial_na,'_',groupy$spatial_al)
-groupy$to_spatial_na<-paste0('end_',groupy$to_district_spatial_na,'_',groupy$spatial_al_to)
 
 from <- unique(groupy$from_spatial_na)
 to <- unique(groupy$to_spatial_na)
@@ -107,6 +115,8 @@ df.indexes$index <- as.numeric(df.indexes$index)-1
 
 groupy <- merge(groupy,df.indexes,by.x='from_spatial_na',by.y='name')
 groupy <- merge(groupy,df.indexes,by.x='to_spatial_na',by.y='name')
+
+groupy <- groupy %>% arrange(total)
 
 groupy <- groupy %>% select(source=index.x,target=index.y,value=total)# %>% filter(target>0)
 
@@ -144,6 +154,38 @@ p <- plot_ly(
     )
   )
 p
+```
+## plot the migrations balances :
+```{r}
+# load geo data from LOR districts
+df.districts <- fread('../data/lor_districts_geodata.csv') %>% select(-V1,-spatial_al)
+df.balance_trips.overall <- read.csv('../data/balance_trips_overall.csv')
+df.from.to.districts.overall <- read.csv('../data/ditricts_from_to_trips_overall.csv')
+
+
+# plot top 15 of origin :
+df.from.to.districts.overall <- merge(df.from.to.districts.overall, df.districts %>% select(spatial_na,OTEIL),by='spatial_na')
+
+p1<-ggplot(df.from.to.districts.overall %>% filter(direction=='from'),aes(reorder(OTEIL,trips),trips,fill='lightred'))+ geom_bar(stat='identity')+coord_flip()+xlab('')+ggtitle(('Top 15 Orteils by trips origin'))+ theme_fivethirtyeight()+theme(legend.position="none")
+
+p1
+ggsave('pictures/overall_trips.png',p1,dpi = 300)
+
+df.balance_trips.time_interval <- read.csv('../data/balance_trips_time_interval.csv')
+df.from.to.districts.time_interval <- read.csv('../data/ditricts_from_to_trips_time_interval.csv')
+
+
+df.balance_trips.time_interval <- merge(df.balance_trips.time_interval,df.districts %>% select(spatial_na,OTEIL),by='spatial_na')
+
+
+df.balance_trips.time_interval$time_interval <- as.factor(df.balance_trips.time_interval$time_interval)
+df.balance_trips.time_interval <- df.balance_trips.time_interval %>% mutate(time_interval = fct_relevel(time_interval, 'Morning','Noon','Evening'))
+
+
+p2<-ggplot(df.balance_trips.time_interval,aes(reorder(OTEIL,balance),balance,fill= balance < 0))+ geom_bar(stat='identity')+coord_flip()+xlab('')+ggtitle(('Top 15 Orteils net migration balance'))+ theme_fivethirtyeight()+theme(legend.position="none")+facet_wrap(.~time_interval) + scale_fill_manual(guide = FALSE, breaks = c(TRUE, FALSE), values=c("seagreen", "indianred"))
+p2
+ggsave('pictures/net_balance_trips.png',p2, dpi = 300)
+
 ```
 
 
