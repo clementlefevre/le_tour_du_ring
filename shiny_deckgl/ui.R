@@ -18,7 +18,7 @@ anim.options <- animationOptions(interval = 2000, loop = TRUE, playButton = NULL
 # Define UI for application that draws a histogram
 shinyUI(fluidPage(theme = shinytheme("cyborg"),
                 
-    h4("Berlin Bikesharing flows"),
+    h2("Bike Pulse"),
 
     
     tabsetPanel(type = "tabs",
@@ -43,26 +43,26 @@ shinyUI(fluidPage(theme = shinytheme("cyborg"),
                          )),
                              column(
                                  2, textOutput("direction.1"),
-                                 selectInput("ortsteil.from", "",
+                                 selectInput("ortsteil.from", NULL,
                                              choices = from.districts)
                              ),
                          column(
                              2, textOutput("direction.2"),
-                             selectInput("ortsteil.to", "",
+                             selectInput("ortsteil.to",NULL,
                                          choices = to.districts)
                          ),
                              column(
                                  2,
-                                 selectInput("hour_filter", "Hour of day :",
+                                 selectInput("hour_filter", NULL,
                                              choices = hour_filter)
                              ),
                              column(2, radioButtons(
                                  "is.weekend", "is week end :",
                                  c("YES" = TRUE,
                                    "NO" = FALSE)
-                             )),textOutput("bike_flow")
+                             ))#,textOutput("bike_flow")
                           
-                         ),        deckglOutput("flows")
+                         ),        deckglOutput("flows",width = "100%", height = 800)
                 ),
                 tabPanel("Bikes & BVG",h5("Bikes available on Wednesday 3rd July 2019") ,sliderInput(
                     "time",
@@ -72,7 +72,7 @@ shinyUI(fluidPage(theme = shinytheme("cyborg"),
                     value =as.POSIXct('2019-07-03 6:00:00'),
                     step = 60*10*2,
                     animate = anim.options
-                ),leafletOutput("map.locations") 
+                ),leafletOutput("map.locations",width='100%',height =  800) 
                 ),
                 tabPanel("District Flow", selectInput(
                     "sankey.from",

@@ -166,7 +166,7 @@ df.from.to.districts.overall <- read.csv('../data/ditricts_from_to_trips_overall
 # plot top 15 of origin :
 df.from.to.districts.overall <- merge(df.from.to.districts.overall, df.districts %>% select(spatial_na,OTEIL),by='spatial_na')
 
-p1<-ggplot(df.from.to.districts.overall %>% filter(direction=='from'),aes(reorder(OTEIL,trips),trips,fill='lightred'))+ geom_bar(stat='identity')+coord_flip()+xlab('')+ggtitle(('Top 15 Orteils by trips origin'))+ theme_fivethirtyeight()+theme(legend.position="none")
+p1<-ggplot(df.from.to.districts.overall %>% filter(direction=='from'),aes(reorder(OTEIL,trips),trips,fill='lightred'))+ geom_bar(stat='identity')+coord_flip()+xlab('')+ggtitle(('Top 15 Bezirk by trips origin'))+ theme_fivethirtyeight()+theme(legend.position="none")
 
 p1
 ggsave('pictures/overall_trips.png',p1,dpi = 300)
@@ -182,11 +182,68 @@ df.balance_trips.time_interval$time_interval <- as.factor(df.balance_trips.time_
 df.balance_trips.time_interval <- df.balance_trips.time_interval %>% mutate(time_interval = fct_relevel(time_interval, 'Morning','Noon','Evening'))
 
 
-p2<-ggplot(df.balance_trips.time_interval,aes(reorder(OTEIL,balance),balance,fill= balance < 0))+ geom_bar(stat='identity')+coord_flip()+xlab('')+ggtitle(('Top 15 Orteils net migration balance'))+ theme_fivethirtyeight()+theme(legend.position="none")+facet_wrap(.~time_interval) + scale_fill_manual(guide = FALSE, breaks = c(TRUE, FALSE), values=c("seagreen", "indianred"))
+p2<-ggplot(df.balance_trips.time_interval,aes(reorder(OTEIL,balance),balance,fill= balance < 0))+ geom_bar(stat='identity')+coord_flip()+xlab('')+ggtitle(('Top 15 Bezirk net migration balance'))+ theme_fivethirtyeight()+theme(legend.position="none")+facet_wrap(.~time_interval) + scale_fill_manual(guide = FALSE, breaks = c(FALSE, TRUE), values=c("darkgray", "indianred"))
 p2
 ggsave('pictures/net_balance_trips.png',p2, dpi = 300)
 
 ```
 
 
+
+## correlations
+```{r}
+
+df <- fread('../data/bikes_preprocessed_cleaned.csv')
+
+df.districts <- read.csv('../data/lor_districts_geodata.csv') %>% select(spatial_na,OTEIL)
+
+
+df <- df %>% filter(mode=='trip' & hour_of_day!=4 & between(hour_of_day,6,23) & between(duration_minutes,5,60) & between(distance_direct,100,10000)) 
+
+top.10.districts <- df %>% group_by(from_district_spatial_na)%>% summarise(trips=n()) %>% top_n(5,trips) %>% pull(from_district_spatial_na)
+
+df <- df %>% filter(from_district_spatial_na %in% top.10.districts)
+df$timestamp <- ymd_hms(df$timestamp)
+df$time <- time <- strftime(df$timestamp, format="%H:%M:%S")
+
+merged <- merge(df,df.districts,by.x='from_district_spatial_na',by.y='spatial_na')
+
+ggplot(merged,aes(duration_minutes,distance_direct,color=as.factor(OTEIL)))+ geom_smooth(se=F)
+```
+## PCA
+
+load data
+```{r}
+df <- fread('../data/bikes_preprocessed_cleaned.csv')
+df$timestamp <- ymd_hms(df$timestamp)
+df <- df %>% filter(mode=='trip' & hour_of_day!=4 & between(hour_of_day,6,23) & between(duration_minutes,10,60) & between(distance_direct,100,10000) & month(timestamp)==6) 
+
+
+top.10.districts <- df %>% group_by(from_district_spatial_na)%>% summarise(trips=n()) %>% top_n(10,trips) %>% pull(from_district_spatial_na)
+
+df <- df %>% filter(from_district_spatial_na %in% top.10.districts)
+```
+
+run pca
+```{r}
+
+
+df.for.pca <-df %>% filter(providerId==1) %>% select(from_district_spatial_na,is.weekend,is.working.hour,hour_of_day,bike_exact_latitude,bike_exact_longitude,duration_minutes,distance_direct,speed, bike_exact_latitude)%>% na.omit()
+
+df.for.pca$speed_sqrt <- df.for.pca$speed^2
+
+pca <- prcomp(df.for.pca %>% select(-from_district_spatial_na), center = TRUE,scale. = TRUE)
+summary(pca)
+
+df_out <- as.data.frame(pca$x)
+
+df_out <-cbind(df_out,df.for.pca)
+
+df_out<- df_out %>% mutate(weekend=ifelse(is.weekend,'weekend','weekdays'))
+p<-ggplot(df_out,aes(PC1,PC2,color=as.factor(weekend)))+ geom_point(alpha=.8,size=.1)+ #scale_colour_brewer(palette = "Set1",name='Is weekend ?')+
+ scale_colour_manual(guide = FALSE, breaks = c('weekend','weekdays'), values=c( "indianred","dimgray"),name='')+xlim(-5,5)+ggtitle("Principal Component Analysis")+theme_fivethirtyeight() + guides(color = guide_legend(override.aes = list(size=5)))
+p
+#ggsave('pictures/pca.png',p,dpi=300)
+
+```
 

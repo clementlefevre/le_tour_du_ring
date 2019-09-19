@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rgdal, sp, data.table,lubridate,dplyr,stringr,ggplot2,readr,stringi,leaflet)
+```
+
+
+# load data
+```{r}
+
+df <- read.csv('../data/UMBW_clean.csv')
+df.sbahn_ubahn <-df %>% filter( str_starts(Bauwerk.Name, 'S\\+U ') |(str_starts(Bauwerk.Name, 'S ') ))
+  stri_sub(df.sbahn_ubahn$X.Koordinate, 3, 2) <- '.'
+stri_sub(df.sbahn_ubahn$Y.Koordinate, 3, 2) <- '.'
+df.sbahn_ubahn$lon<-as.numeric(df.sbahn_ubahn$X.Koordinate)
+df.sbahn_ubahn$lat<-as.numeric(df.sbahn_ubahn$Y.Koordinate)
+
+df.sbahn_ubahn <- df.sbahn_ubahn %>% distinct(Bauwerk.Name,.keep_all = T)
+guess_encoding('../data/UMBW.csv', n_max = 10000)
+
+
+df.bvg <- read.csv('../data/bvg_stations.csv')
+df.ubahn_tram <- df.bvg %>% filter(railway=='station' | railway=='tram_stop') %>% filter(!str_starts(name,'S '))
+df.ubahn_tram <- df.ubahn_tram  <- df.ubahn_tram %>% distinct(name,.keep_all = T)
+
+df.sbahn_ubahn <- df.sbahn_ubahn %>% select(name=Bauwerk.Name,lat,lon)
+df.ubahn_tram <- df.ubahn_tram %>% select(name,lat,lon)
+
+df.ubahn_tram_sbahn <- rbind(df.sbahn_ubahn,df.ubahn_tram)
+
+write.csv(df.ubahn_tram_sbahn,'../data/bvg_ubahn_sbahn_tram.csv')
+```
+
+
+# all SBahn:
+```{r}
+ 
+      m <-  leaflet(df.sbahn_ubahn) %>%  setView(13.3666652,52.5166646, zoom = 12) %>%
+        addProviderTiles(providers$CartoDB.DarkMatter)  %>%
+           addCircleMarkers(
+           lng = ~lon, lat = ~lat, radius = 3,stroke = FALSE, fillOpacity = 1,label=~Bauwerk.Name,fillColor='red')%>%
+  addCircleMarkers(data=df.ubahn_tram,          lng = ~lon, lat = ~lat, radius = 3,stroke = FALSE, fillOpacity = 1,label=~name,fillColor='blue')
+    
+    
+        
+      m
+```
+```{r}
+      m <-  leaflet(df.ubahn_tram_sbahn) %>%  setView(13.3666652,52.5166646, zoom = 12) %>%
+        addProviderTiles(providers$CartoDB.DarkMatter)  %>%
+           addCircleMarkers(
+           lng = ~lon, lat = ~lat, radius = 3,stroke = FALSE, fillOpacity = 1,label=~name,fillColor='red')
+    
+    
+        
+      m
+```
+

@@ -37,9 +37,32 @@ plot(geo.json.merged,col=geo.json.merged$dummy_value)
 geojsonio::geojson_write(geo.json.merged, file = "../data/test.geojson")
 
 ```
+```{r}
+library(geojsonio)
+library(rgdal)
+library(stringr)
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+df.geo <-geojsonio::geojson_read('../data/export.geojson' )
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+plot(geo.json.original)
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+# read the other file we want to merge with :
+
+df.lor.districts <- read.csv('../data/lor_districts_geodata.csv')
+
+#convert the spatial_na field of df.lor.district to string  &  add a leading zero :
+df.lor.districts$spatial_na <- str_pad(as.character(df.lor.districts$spatial_na),4,pad = '0')
+
+# add a dummy column just to show we can add them to the geo.json.file :
+df.lor.districts$dummy_value <- sample(100, size = nrow(df.lor.districts), replace = TRUE)
+
+#add the df.lor.district column to the geosjon :
+geo.json.merged <- sp::merge(geo.json.original,df.lor.districts,by='spatial_na')
+                          
+
+plot(geo.json.merged,col=geo.json.merged$dummy_value)
+
+# finally, save the geojson to json format again:
+geojsonio::geojson_write(geo.json.merged, file = "../data/test.geojson")
+```
+
