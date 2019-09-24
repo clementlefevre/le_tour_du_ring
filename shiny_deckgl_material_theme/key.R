@@ -1,0 +1,1 @@
+MAPBOX_API_TOKEN = "pk.eyJ1IjoidGVjaG5vbG9naWVzdGlmdHVuZyIsImEiOiJjazBkeDduY3kwMW8zM2ZwbGgwb3kxbnNwIn0.CmASst9JC6hSpILBFQHNig"
