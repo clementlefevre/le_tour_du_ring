@@ -228,7 +228,7 @@ run pca
 ```{r}
 
 
-df.for.pca <-df %>% filter(providerId==1) %>% select(from_district_spatial_na,is.weekend,is.working.hour,hour_of_day,bike_exact_latitude,bike_exact_longitude,duration_minutes,distance_direct,speed, bike_exact_latitude)%>% na.omit()
+df.for.pca <-df %>%  select(from_district_spatial_na,is.weekend,is.working.hour,hour_of_day,bike_exact_latitude,bike_exact_longitude,duration_minutes,distance_direct,speed, bike_exact_latitude)%>% na.omit()
 
 df.for.pca$speed_sqrt <- df.for.pca$speed^2
 
@@ -240,7 +240,7 @@ df_out <- as.data.frame(pca$x)
 df_out <-cbind(df_out,df.for.pca)
 
 df_out<- df_out %>% mutate(weekend=ifelse(is.weekend,'weekend','weekdays'))
-p<-ggplot(df_out,aes(PC1,PC2,color=as.factor(weekend)))+ geom_point(alpha=.8,size=.1)+ #scale_colour_brewer(palette = "Set1",name='Is weekend ?')+
+p<-ggplot(df_out,aes(PC1,PC2,color=as.factor(weekend)))+ geom_point(alpha=.8,size=.1)+ scale_colour_brewer(palette = "Set1",name='Is weekend ?')+
  scale_colour_manual(guide = FALSE, breaks = c('weekend','weekdays'), values=c( "indianred","dimgray"),name='')+xlim(-5,5)+ggtitle("Principal Component Analysis")+theme_fivethirtyeight() + guides(color = guide_legend(override.aes = list(size=5)))
 p
 #ggsave('pictures/pca.png',p,dpi=300)
