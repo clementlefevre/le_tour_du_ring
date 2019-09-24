@@ -8,6 +8,7 @@
 #
 
 library(shiny)
+library(shinymaterial)
 library(deckgl)
 library(plotly)
 library(shinythemes)
