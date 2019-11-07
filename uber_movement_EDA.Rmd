@@ -1,0 +1,67 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(leaflet)
+```
+```{r}
+DT <- fread('data/uber_movement/movement-speeds-hourly-berlin-2019-6.csv')
+DT_osm <- fread('data/uber_movement/osm_nodes_id_locations.csv')
+```
+```{r}
+DT[ ,`:=`(segment_id = NULL, start_junction_id = NULL,end_junction_id=NULL)]
+DT[,utc_timestamp:=ymd_hms(utc_timestamp)]
+```
+
+```{r}
+# DT_osm[,ts:=as.POSIXct(ts)]
+# osm <- copy(DT_osm)
+# osm <- unique(osm, by = "id")#DT_osm[ DT_osm[order(id, ts), .I[.N], by=id]$V1 ]
+```
+
+
+```{r}
+DT_osm[,c("lon", "lat") := tstrsplit(location, "/", fixed=TRUE)]
+DT_osm[,lat:= as.numeric(lat)]
+DT_osm[,lon:= as.numeric(lon)]
+DT_osm <- DT_osm[,c("id","lat","lon"), with=FALSE]
+
+setkey(DT,osm_start_node_id)
+setkey(DT_osm,id)
+
+t <- merge(DT,DT_osm,by.x='osm_start_node_id',by.y='id',suffixes=c("", ".from"))
+t2 <- merge(t,DT_osm,by.x='osm_end_node_id',by.y='id',suffixes=c("", ".to"))
+
+```
+gerichstrasse
+```{r}
+t2[osm_way_id==36954721]
+```
+
+# group per start id
+```{r}
+groupy.start.node.id <- t2[,.(total_trips=.N,median_speed=median(speed_kph_mean),lat=first(lat),lon=first(lon)),by=osm_start_node_id]
+ggplot(groupy.start.node.id[total_trips>1000],aes(lon,lat,size=total_trips))+geom_point(alpha=.2)
+```
+```{r}
+pal <- colorNumeric(
+  palette = "Blues",
+  domain = groupy.start.node.id$median_speed)
+
+leaflet(as.data.frame(groupy.start.node.id[total_trips>100])) %>% addTiles() %>% addProviderTiles(providers$Stamen.Toner)%>%
+  addCircleMarkers(
+   radius = ~(total_trips/200),
+   color = ~pal(median_speed),
+    stroke = FALSE, fillOpacity = 1
+  )
+```
+
